@@ -1,0 +1,39 @@
+*.iml
+.gradle
+/local.properties
+/.idea/caches
+/.idea/libraries
+/.idea/modules.xml
+/.idea/workspace.xml
+/.idea/navEditor.xml
+/.idea/assetWizardSettings.xml
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+/**/.attach_pid*
+*.aar
+
+#additional ignorables
+# Android
+.gradle/
+**/build/
+**/.cxx/
+**/.externalNativeBuild/
+
+# iOS
+ios/Flutter/Flutter.podspec
+ios/.symlinks/
+ios/Pods/
+ios/Podfile.lock
+
+# IntelliJ/Android Studio
+.idea/
+
+# macOS/Linux/Windows metadata
+*.swp
+
+# Other
+*.aar  # ← Ignore unless you need to commit a prebuilt binary
