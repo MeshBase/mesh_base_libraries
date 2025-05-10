@@ -1,4 +1,7 @@
 [versions]
+core = "1.6.1"
+mockito = "5.15.2"
+mockk = "1.13.16"
 agp = "8.9.1"
 kotlin = "2.0.21"
 coreKtx = "1.16.0"
@@ -12,6 +15,9 @@ appcompat = "1.7.0"
 material = "1.12.0"
 
 [libraries]
+androidx-core = { module = "androidx.test:core", version.ref = "core" }
+mockito = { module = "org.mockito:mockito-core", version.ref = "mockito" }
+mockk = { module = "io.mockk:mockk", version.ref = "mockk" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }
