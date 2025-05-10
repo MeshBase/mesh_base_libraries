@@ -1,4 +1,4 @@
-package com.example.mesh_base;
+package io.github.meshbase.mesh_base_core;
 
 import static org.junit.Assert.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
