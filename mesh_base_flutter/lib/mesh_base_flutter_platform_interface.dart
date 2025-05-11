@@ -1,5 +1,6 @@
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 
+import 'mesh_base_flutter.dart';
 import 'mesh_base_flutter_method_channel.dart';
 
 abstract class MeshBaseFlutterPlatform extends PlatformInterface {
@@ -25,5 +26,36 @@ abstract class MeshBaseFlutterPlatform extends PlatformInterface {
 
   Future<String?> getPlatformVersion() {
     throw UnimplementedError('platformVersion() has not been implemented.');
+  }
+
+  Future<void> on() async {
+    throw UnimplementedError('turnOn() has not been implemented.');
+  }
+
+  Future<void> off() async {
+    throw UnimplementedError('turnOff() has not been implemented.');
+  }
+
+  Future<List<Device>> getNeighbors() async {
+    throw UnimplementedError('getNeighbors() has not been implemented.');
+  }
+
+  Future<MeshStatus> getStatus() async {
+    throw UnimplementedError('getStatus() has not been implemented.');
+  }
+
+  Future<SendResult> send({
+    required MeshProtocol protocol,
+    bool keepMessageId = false,
+  }) async {
+    throw UnimplementedError('send() has not been implemented.');
+  }
+
+  Future<void> subscribe(MeshManagerListener listener) async {
+    throw UnimplementedError('subscribe() has not been implemented.');
+  }
+
+  Future<void> unsubscribe() async {
+    throw UnimplementedError('unsubscribe() has not been implemented.');
   }
 }

@@ -1,5 +1,7 @@
 package io.github.MeshBase.mesh_base_flutter;
 
+
+import java.util.Objects;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -74,7 +76,7 @@ class ChannelMeshProtocol {
 
 
 //TODO: consider moving to the core library
-public class RawBytesBody implements MeshSerializer<RawBytesBody> {
+class RawBytesBody implements MeshSerializer<RawBytesBody> {
   private static final int LENGTH_FIELD_SIZE = 4;
 
   private final byte[] content;
