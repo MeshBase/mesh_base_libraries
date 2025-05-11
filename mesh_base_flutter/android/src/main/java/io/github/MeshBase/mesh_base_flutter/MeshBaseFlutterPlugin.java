@@ -1,10 +1,8 @@
 package io.github.MeshBase.mesh_base_flutter;
-
 import android.content.Intent;
 import android.os.Build;
 import android.util.Log;
 
-import androidx.activity.ComponentActivity;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
@@ -18,6 +16,7 @@ import java.util.UUID;
 import io.flutter.embedding.engine.plugins.FlutterPlugin;
 import io.flutter.embedding.engine.plugins.activity.ActivityAware;
 import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding;
+import io.flutter.plugin.common.EventChannel;
 import io.flutter.plugin.common.MethodCall;
 import io.flutter.plugin.common.MethodChannel;
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler;
@@ -34,22 +33,38 @@ import io.github.meshbase.mesh_base_core.router.SendListener;
 import io.github.meshbase.mesh_base_core.temptest.TempTest;
 import io.github.meshbase.mesh_base_core.mesh_manager.MeshManager;
 
-public class MeshBaseFlutterPlugin implements FlutterPlugin, MethodCallHandler, ActivityAware,  PluginRegistry.ActivityResultListener {
-  private MethodChannel channel;
+public class MeshBaseFlutterPlugin implements FlutterPlugin, MethodCallHandler, ActivityAware,  PluginRegistry.ActivityResultListener, EventChannel.StreamHandler {
+  private MethodChannel methodChannel;
+  private EventChannel eventChannel;
+  private EventChannel.EventSink eventSink;
   private MeshManager meshManager = null;
   String TAG = "my_plugin";
 
   @Override
   public void onAttachedToEngine(@NonNull FlutterPluginBinding flutterPluginBinding) {
-    channel = new MethodChannel(flutterPluginBinding.getBinaryMessenger(), "mesh_base_flutter");
-    channel.setMethodCallHandler(this);
+    methodChannel = new MethodChannel(flutterPluginBinding.getBinaryMessenger(), "mesh_base_flutter");
+    methodChannel.setMethodCallHandler(this);
+    eventChannel = new EventChannel(flutterPluginBinding.getBinaryMessenger(), "mesh_manager/events");
+    // 2. set this class as the handler for stream events
+    eventChannel.setStreamHandler(this);
     Log.d(TAG, new TempTest().getName() );
   }
 
+  @Override
+  public void onListen(Object arguments, EventChannel.EventSink events) {
+    this.eventSink = events;
+  }
+
+  @Override
+  public void onCancel(Object arguments) {
+    this.eventSink = null;
+  }
 
   @Override
   public void onDetachedFromEngine(@NonNull FlutterPluginBinding binding) {
-    channel.setMethodCallHandler(null);
+    methodChannel.setMethodCallHandler(null);
+    eventChannel.setStreamHandler(null);
+    eventChannel=null;
   }
 
   @Override
@@ -83,6 +98,7 @@ public class MeshBaseFlutterPlugin implements FlutterPlugin, MethodCallHandler, 
   ///
   @Override
   public void onMethodCall(@NonNull MethodCall call, @NonNull Result result) {
+    Log.d(TAG, "methodCall, method: "+call.method + " ");
     switch (call.method) {
       case "getPlatformVersion":
         result.success("Android " + Build.VERSION.RELEASE);
@@ -101,7 +117,6 @@ public class MeshBaseFlutterPlugin implements FlutterPlugin, MethodCallHandler, 
       case "getNeighbors":
         result.success(devicesToListOfMap(meshManager.getNeighbors()));
         break;
-
       case "getStatus":
         result.success(statusToMap(meshManager.getStatus()));
         break;
@@ -153,6 +168,7 @@ public class MeshBaseFlutterPlugin implements FlutterPlugin, MethodCallHandler, 
     }
   }
 
+
   // subscribe unsubscribe utils
   private void subscribeFlutterListener() {
     MeshManagerListener listener = new MeshManagerListener() {
@@ -181,7 +197,7 @@ public class MeshBaseFlutterPlugin implements FlutterPlugin, MethodCallHandler, 
         invokeFlutterEvent("error", Map.of("message", Objects.requireNonNull(e.getMessage())));
       }
     };
-      meshManager.subscribe(listener);
+    meshManager.subscribe(listener);
   }
 
   private void unsubscribeAllListeners() {
@@ -226,7 +242,6 @@ public class MeshBaseFlutterPlugin implements FlutterPlugin, MethodCallHandler, 
     return map;
   }
 
-
   private Map<String,Object> statusToMap(Status status) {
     Map<String,Object> map = new HashMap<>();
     map.put("isOn", status.isOn());
@@ -249,6 +264,7 @@ public class MeshBaseFlutterPlugin implements FlutterPlugin, MethodCallHandler, 
     map.put("type", type);
     map.put("payload", payload);
     Log.d(TAG, "invoking type:"+type+ " payload:"+payload);
-    channel.invokeMethod("onMeshEvent", map);
+    eventSink.success(map);
   }
+
 }
