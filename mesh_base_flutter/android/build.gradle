@@ -59,17 +59,17 @@ dependencies{
     implementation "io.github.meshbase:mesh_base_core:1.1"
 }
 
-tasks.register('prepareDependencies', Exec) {
-    group = 'build setup'
-    description = 'Ensures local AAR dependencies are up to date'
 
-    def isWindows = System.properties['os.name']
-            .toLowerCase()
-            .contains('windows')
+
+tasks.register('publishMeshCore', Exec) {
+    group = 'build setup'
+    description = 'Publishes the latest mesh_base_core AAR to MavenLocal'
+
+    def isWindows = System.getProperty('os.name').toLowerCase().contains('windows')
     def gradleCmd = isWindows ? 'gradlew.bat' : './gradlew'
 
-    workingDir '../../'
-    commandLine gradleCmd, ':mesh_base_core:publishAar'
+    workingDir '../../' // Path to your Android library
+    commandLine gradleCmd, 'clean', 'publishToMavenLocal', '--rerun-tasks'
 }
 
-preBuild.dependsOn prepareDependencies
+preBuild.dependsOn publishMeshCore
