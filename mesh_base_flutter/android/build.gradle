@@ -53,32 +53,23 @@ android {
     }
 }
 
-//Run this if not getting latest code changes in mesh_base_core
-//tasks.register("buildCoreAar", Exec) {
-//    workingDir = file("../../") // Main project root: LibrariesSkeleton
-//    commandLine "./gradlew", ":mesh_base_core:copyAarToFlutter"
-//
-//    // Avoid Gradle skipping this task
-//    outputs.upToDateWhen { false }
-//}
-
-//tasks.named("preBuild") {
-//    dependsOn(":mesh_base_core:compileAndPublishToMaven")
-//}
-
-//tasks.named("preBuild") {
-//    dependsOn(tasks.register("publishMeshBaseCore") {
-//        doLast {
-//            exec {
-//                workingDir = file('../../mesh_base_core')
-//                commandLine = ['./gradlew', 'compileAndPublishToMaven']
-//            }
-//        }
-//    })
-//}
-
 dependencies{
 //    implementation 'com.google.android.gms:play-services-location:21.3.0'
 //    implementation fileTree(dir: 'libs', include: ['*.aar'])
     implementation "io.github.meshbase:mesh_base_core:1.1"
 }
+
+tasks.register('prepareDependencies', Exec) {
+    group = 'build setup'
+    description = 'Ensures local AAR dependencies are up to date'
+
+    def isWindows = System.properties['os.name']
+            .toLowerCase()
+            .contains('windows')
+    def gradleCmd = isWindows ? 'gradlew.bat' : './gradlew'
+
+    workingDir '../../'
+    commandLine gradleCmd, ':mesh_base_core:publishAar'
+}
+
+preBuild.dependsOn prepareDependencies

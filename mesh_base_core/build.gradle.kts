@@ -57,20 +57,30 @@ dependencies {
     androidTestImplementation(libs.androidx.espresso.core)
 }
 
+
 afterEvaluate {
-    publishing {
-        publications {
-            create<MavenPublication>("release") {
-                groupId = project.group.toString()
-                artifactId = project.name
-                version = project.version.toString()
-                artifact("$buildDir/outputs/aar/mesh_base_core-release.aar") {
-                      extension = "aar"
+    tasks.register("publishAar") {
+        group = "publishing"
+        description = "Publishes the AAR to the local Maven repository"
+        dependsOn("assembleRelease") // ensure the AAR is built before publishing
+
+        doLast {
+            publishing {
+                publications {
+                    create<MavenPublication>("release") {
+                        groupId = project.group.toString()
+                        artifactId = project.name
+                        version = project.version.toString()
+                        artifact("$buildDir/outputs/aar/mesh_base_core-release.aar") {
+                            extension = "aar"
+                        }
+                    }
                 }
             }
         }
     }
 }
+
 
 //tasks.register("compileAndPublishToMaven") {
 //    group = "publishing"
