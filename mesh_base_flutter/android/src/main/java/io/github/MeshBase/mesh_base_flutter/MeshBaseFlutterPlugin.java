@@ -38,7 +38,9 @@ public class MeshBaseFlutterPlugin implements FlutterPlugin, MethodCallHandler, 
   private EventChannel eventChannel;
   private EventChannel.EventSink eventSink;
   private MeshManager meshManager = null;
-  String TAG = "my_plugin";
+  String TAG = "my_example_plugin";
+
+  private boolean hasSubscribed = false;
 
   @Override
   public void onAttachedToEngine(@NonNull FlutterPluginBinding flutterPluginBinding) {
@@ -52,11 +54,13 @@ public class MeshBaseFlutterPlugin implements FlutterPlugin, MethodCallHandler, 
 
   @Override
   public void onListen(Object arguments, EventChannel.EventSink events) {
+    Log.d(TAG, "onListen");
     this.eventSink = events;
   }
 
   @Override
   public void onCancel(Object arguments) {
+    Log.d(TAG, "onCancel");
     this.eventSink = null;
   }
 
@@ -104,6 +108,10 @@ public class MeshBaseFlutterPlugin implements FlutterPlugin, MethodCallHandler, 
         result.success("Android " + Build.VERSION.RELEASE);
         break;
 
+      case "getId":
+        result.success(meshManager.getId().toString());
+        break;
+
       case "on":
         meshManager.on();
         result.success(null);
@@ -122,7 +130,11 @@ public class MeshBaseFlutterPlugin implements FlutterPlugin, MethodCallHandler, 
         break;
 
       case "send":
-        ChannelMeshProtocol channelProtocol = ChannelMeshProtocol.fromMap(call.argument("protocol"));
+        HashMap<String, Object> protocolMap = call.argument("protocol");
+        if (protocolMap == null){
+          throw new RuntimeException("protocol map from flutter is null, map="+ call.arguments);
+        }
+        ChannelMeshProtocol channelProtocol = ChannelMeshProtocol.fromMap(protocolMap);
         boolean keepMessageId = Boolean.TRUE.equals(call.argument("keepMessageId"));
         MeshProtocol<RawBytesBody> protocol =
             new ConcreteMeshProtocol<>(1, -1, -1, UUID.fromString(channelProtocol.sender),
@@ -171,6 +183,10 @@ public class MeshBaseFlutterPlugin implements FlutterPlugin, MethodCallHandler, 
 
   // subscribe unsubscribe utils
   private void subscribeFlutterListener() {
+    //To avoid multiple broadcasts about the same event
+    //TODO: implement ids to identify each listener so that its easy to unsubscribe
+    if (hasSubscribed)return;
+    hasSubscribed = true;
     MeshManagerListener listener = new MeshManagerListener() {
       @Override
       public void onDataReceivedForSelf(MeshProtocol<?> protocol) {
@@ -217,7 +233,7 @@ public class MeshBaseFlutterPlugin implements FlutterPlugin, MethodCallHandler, 
 
   private ChannelMeshProtocol protocolToChannelProtocol(MeshProtocol<?> protocol) {
     return new ChannelMeshProtocol(
-        protocol.getByteType().ordinal(),
+        protocol.getByteType(),
         //TODO: make hops publicly visible
         -1,
         protocol.getMessageId(),

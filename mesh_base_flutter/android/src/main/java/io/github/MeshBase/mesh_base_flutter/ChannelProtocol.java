@@ -9,16 +9,17 @@ import java.util.HashMap;
 import java.util.Map;
 
 import io.github.meshbase.mesh_base_core.router.MeshSerializer;
+import io.github.meshbase.mesh_base_core.router.ProtocolType;
 
 class ChannelMeshProtocol {
-  public final int messageType;
+  public final ProtocolType messageType;
   public final int remainingHops;
   public final int messageId;
   public final String sender;       // UUID.toString()
   public final String destination;  // UUID.toString()
   public final byte[] body;         // raw bytes
 
-  public ChannelMeshProtocol(int messageType,
+  public ChannelMeshProtocol(ProtocolType messageType,
                       int remainingHops,
                       int messageId,
                       String sender,
@@ -34,7 +35,7 @@ class ChannelMeshProtocol {
 
   public Map<String, Object> toMap() {
     Map<String,Object> m = new HashMap<>();
-    m.put("messageType",   messageType);
+    m.put("messageType",   messageType.name());
     m.put("remainingHops", remainingHops);
     m.put("messageId",     messageId);
     m.put("sender",        sender);
@@ -50,19 +51,13 @@ class ChannelMeshProtocol {
   }
 
   public static ChannelMeshProtocol fromMap(Map<String, Object> m) {
-    int messageType     = (Integer) m.get("messageType");
-    int remainingHops   = (Integer) m.get("remainingHops");
-    int messageId       = (Integer) m.get("messageId");
-    String sender       = (String)  m.get("sender");
-    String destination  = (String)  m.get("destination");
+    ProtocolType messageType     = ProtocolType.valueOf ((String) Objects.requireNonNull(m.get("messageType")));
+    int remainingHops   = ((Number) Objects.requireNonNull(m.get("remainingHops"))).intValue();
+    int messageId       = ((Number) Objects.requireNonNull(m.get("messageId"))).intValue();
+    String sender       = (String) Objects.requireNonNull(m.get("sender"));
+    String destination  = (String) Objects.requireNonNull(m.get("destination"));
 
-    ArrayList<Integer> rawBody = (ArrayList<Integer>) m.get("body");
-    assert rawBody != null;
-    byte[] body = new byte[rawBody.size()];
-    for (int i = 0; i < rawBody.size(); i++) {
-      body[i] = rawBody.get(i).byteValue();
-    }
-
+    byte[] body = (byte[]) Objects.requireNonNull(m.get("body"));
     return new ChannelMeshProtocol(
         messageType,
         remainingHops,
