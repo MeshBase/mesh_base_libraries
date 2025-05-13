@@ -323,7 +323,6 @@ public class BLEConnectionHandler extends ConnectionHandler {
     permission.onPermissionResult(requestCode);
   }
 
-
   @Override
   public void start() {
     central.start();

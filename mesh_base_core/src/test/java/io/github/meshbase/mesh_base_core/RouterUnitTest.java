@@ -20,15 +20,26 @@ import io.github.meshbase.mesh_base_core.router.Router;
 import io.github.meshbase.mesh_base_core.router.SendListener;
 import io.github.meshbase.mesh_base_core.router.SendMessageBody;
 
+import org.junit.Before;
 import org.junit.Test;
+import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
+import org.robolectric.RobolectricTestRunner;
+import org.robolectric.annotation.Config;
+import org.robolectric.shadows.ShadowLog;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.UUID;
 
+@RunWith(RobolectricTestRunner.class)
+@Config(sdk = 35)
 public class RouterUnitTest {
+    @Before
+    public void setUp() {
+        ShadowLog.stream = System.out;
+    }
 
     @Test
     public void testSendCall_isOnAndNeighbors_callsSend() throws SendError {
@@ -42,7 +53,7 @@ public class RouterUnitTest {
         HashMap<ConnectionHandlersEnum, ConnectionHandler> handlers = new HashMap<>();
         handlers.put(ConnectionHandlersEnum.BLE, handler);
         Router router = new Router(handlers, id, new HashSet<>());
-        MeshProtocol<SendMessageBody> protocol = new ConcreteMeshProtocol<>(1, -1, -1, id, devices.get(0).uuid, new SendMessageBody(4, false, "hello world"));
+        MeshProtocol<SendMessageBody> protocol = new ConcreteMeshProtocol<>(1, 4, -1, id, devices.get(0).uuid, new SendMessageBody(4, false, "hello world"));
 
         //Perfect path
         router.sendData(protocol, mock(SendListener.class));

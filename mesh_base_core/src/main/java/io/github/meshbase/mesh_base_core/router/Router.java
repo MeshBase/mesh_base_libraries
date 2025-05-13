@@ -54,11 +54,10 @@ public class Router {
     }
 
     public void sendData(MeshProtocol<?> protocol, SendListener listener, boolean keepMessageId) {
-        //override since router should be concerned about the remaining hops and keeping track of message Ids
+        //override since router should be concerned about message Ids
         if (!keepMessageId) {
             protocol.messageId = ThreadLocalRandom.current().nextInt();
         }
-        protocol.remainingHops = 4;
         setRouted(protocol.messageId, protocol.sender);
         listeners.put(protocol.messageId, listener);
         try {

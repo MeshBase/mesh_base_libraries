@@ -101,7 +101,7 @@ PluginRegistry.RequestPermissionsResultListener
   @Override
   public boolean onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
     if (meshManager != null){
-      meshManager.onActivityResult(requestCode);
+      meshManager.onPermissionResult(requestCode);
     }
     return false;
   }
@@ -109,7 +109,7 @@ PluginRegistry.RequestPermissionsResultListener
   @Override
   public boolean onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
     if (meshManager != null){
-      meshManager.onActivityResult(requestCode);
+      meshManager.onPermissionResult(requestCode);
     }
     return false;
   }
