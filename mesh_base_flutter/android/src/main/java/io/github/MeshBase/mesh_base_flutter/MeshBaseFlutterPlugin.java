@@ -29,6 +29,7 @@ import io.github.meshbase.mesh_base_core.mesh_manager.MeshManagerListener;
 import io.github.meshbase.mesh_base_core.mesh_manager.Status;
 import io.github.meshbase.mesh_base_core.router.ConcreteMeshProtocol;
 import io.github.meshbase.mesh_base_core.router.MeshProtocol;
+import io.github.meshbase.mesh_base_core.router.ProtocolType;
 import io.github.meshbase.mesh_base_core.router.RawBytesBody;
 import io.github.meshbase.mesh_base_core.temptest.TempTest;
 import io.github.meshbase.mesh_base_core.mesh_manager.MeshManager;
@@ -126,6 +127,7 @@ public class MeshBaseFlutterPlugin implements FlutterPlugin, MethodCallHandler, 
       case "getNeighbors":
         result.success(devicesToListOfMap(meshManager.getNeighbors()));
         break;
+
       case "getStatus":
         result.success(statusToMap(meshManager.getStatus()));
         break;
@@ -227,20 +229,31 @@ public class MeshBaseFlutterPlugin implements FlutterPlugin, MethodCallHandler, 
     Map<String,Object> map = new HashMap<>();
     map.put("acked", acked);
     map.put("response", response);
-    Map<String, String> errorMap = new HashMap<>();
-    errorMap.put("message", error);
-    map.put("error", errorMap);
+    map.put("error", null);
+    if (error != null){
+      Map<String, String> errorMap = new HashMap<>();
+      errorMap.put("message", error);
+      map.put("error", errorMap);
+    }
     return map;
   }
 
-  private ChannelMeshProtocol protocolToChannelProtocol(MeshProtocol<?> protocol) {
+  private ChannelMeshProtocol protocolToChannelProtocol(MeshProtocol<?> protocol  ) {
+
+    byte[] content;
+    if (protocol.getByteType() == ProtocolType.RAW_BYTES_MESSAGE){
+      content = RawBytesBody.decode(protocol.body.encode()).getContent();
+    }else{
+      content = protocol.body.encode();
+    }
+
     return new ChannelMeshProtocol(
         protocol.getByteType(),
         protocol.getRemainingHops(),
         protocol.getMessageId(),
         protocol.sender.toString(),
         protocol.destination.toString(),
-        protocol.body.encode()
+        content
     );
   }
 

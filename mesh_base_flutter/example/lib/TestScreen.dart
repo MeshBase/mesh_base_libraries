@@ -59,12 +59,12 @@ class _BleTestScreenState extends State<ExampleTestScreen> {
     final text = utf8.decode(protocol.body);
     _showSnack('Recv: "$text" from ${protocol.sender}');
 
-    if (protocol.messageType == ProtocolType.UNKNOWN_MESSAGE_TYPE) {
+    if (protocol.messageType == ProtocolType.RAW_BYTES_MESSAGE) {
       // auto‐reply
       final replyText = 'Reply to "$text"';
       final reply = MeshProtocol(
-        messageType: ProtocolType.UNKNOWN_MESSAGE_TYPE,
-        remainingHops: protocol.remainingHops,
+        messageType: ProtocolType.RAW_BYTES_MESSAGE,
+        remainingHops: 10,
         messageId: protocol.messageId,
         sender: protocol.destination,
         destination: protocol.sender,
@@ -75,6 +75,10 @@ class _BleTestScreenState extends State<ExampleTestScreen> {
           _showSnack('Reply acked');
         } else if (res.error != null) {
           _showSnack('Reply error: ${res.error}');
+        } else if (res.response != null) {
+          _showSnack(
+            'Reply received (should not happen): ${res.response.toString()}',
+          );
         }
       });
     }
@@ -127,10 +131,15 @@ class _BleTestScreenState extends State<ExampleTestScreen> {
                     mesh.send(protocol: protocol, keepMessageId: false).then((
                       res,
                     ) {
-                      if (res.acked)
-                        _showSnack('Ack for "${_message}"');
-                      else if (res.error != null)
+                      if (res.acked) {
+                        _showSnack('Ack for "$_message"');
+                      } else if (res.error != null) {
                         _showSnack('Send error: ${res.error}');
+                      } else if (res.response?.body != null) {
+                        _showSnack(
+                          'Response received: ${utf8.decode(res.response!.body)}',
+                        );
+                      }
                     });
                   },
                   child: const Text('Send'),

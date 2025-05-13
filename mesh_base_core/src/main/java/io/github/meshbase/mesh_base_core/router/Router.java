@@ -64,6 +64,7 @@ public class Router {
         try {
             floodData(protocol.encode());
         } catch (SendError e) {
+            Log.e(TAG, "error when sending message with messageId:"+protocol.messageId+" error:"+e);
             handleOnError(e, protocol.messageId);
         }
     }
