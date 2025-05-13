@@ -31,8 +31,10 @@ public class MeshManager {
     private final Router router;
     private final String TAG = "my_meshManager";
     private boolean isOn = false;
+    private Activity activity;
 
     public MeshManager(Activity context) {
+        this.activity = context;
         Store store = Store.getInstance(context);
         if (store.getId() == null) {
             UUID newId = UUID.randomUUID();
@@ -57,7 +59,7 @@ public class MeshManager {
                         public void onNeighborConnected(Device device) {
                             Log.d(TAG, "MeshManager: Neighbor connected: " + device);
                             for (MeshManagerListener listener : listeners) {
-                                listener.onNeighborConnected(device);
+                                activity.runOnUiThread(()-> listener.onNeighborConnected(device) );
                             }
                         }
 
@@ -65,7 +67,7 @@ public class MeshManager {
                         public void onNeighborDisconnected(Device device) {
                             Log.d(TAG, "MeshManager: Neighbor disconnected: " + device);
                             for (MeshManagerListener listener : listeners) {
-                                listener.onNeighborDisconnected(device);
+                                activity.runOnUiThread(()-> listener.onNeighborDisconnected(device) );
                             }
                         }
 
@@ -74,7 +76,7 @@ public class MeshManager {
                             Log.d(TAG, "MeshManager: Disconnected");
                             Status status = getStatus();
                             for (MeshManagerListener listener : listeners) {
-                                listener.onStatusChange(status);
+                                activity.runOnUiThread(()-> listener.onStatusChange(status) );
                             }
                         }
 
@@ -83,7 +85,7 @@ public class MeshManager {
                             Log.d(TAG, "MeshManager: Connected");
                             Status status = getStatus();
                             for (MeshManagerListener listener : listeners) {
-                                listener.onStatusChange(status);
+                                activity.runOnUiThread(()->listener.onStatusChange(status));
                             }
                         }
                     }
@@ -98,6 +100,7 @@ public class MeshManager {
         HashSet<ProtocolType> typesExpectingResponses = new HashSet<>();
         //TODO: implement ProtocolType.Receive_Message as a response type, but for now, use SENd_MESSAGE itself
         typesExpectingResponses.add(ProtocolType.SEND_MESSAGE);
+        typesExpectingResponses.add(ProtocolType.RAW_BYTES_MESSAGE);
         router = new Router(connectionHandlers, id, typesExpectingResponses);
 
         router.setListener(new Router.RouterListener() {
@@ -105,14 +108,14 @@ public class MeshManager {
             public void onData(MeshProtocol<?> protocol, Device neighbor) {
                 Log.d(TAG, "MeshManager: Data received from router, neighbor: " + neighbor);
                 for (MeshManagerListener listener : listeners) {
-                    listener.onDataReceivedForSelf(protocol);
+                    activity.runOnUiThread(()-> listener.onDataReceivedForSelf(protocol) );
                 }
             }
 
             @Override
             public void onError(Exception exception) {
                 for (MeshManagerListener listener : listeners) {
-                    listener.onError(exception);
+                    activity.runOnUiThread(()-> listener.onError(exception) );
                 }
             }
         });
@@ -145,9 +148,9 @@ public class MeshManager {
         isOn = true;
         Status status = getStatus();
         for (MeshManagerListener listener : listeners) {
-            listener.onStatusChange(status);
+            activity.runOnUiThread(()-> listener.onStatusChange(status) );
         }
-        Log.d(TAG, "MeshManager: Mesh turned on, notified listeners");
+        Log.d(TAG, "MeshManager: Mesh turned on, notified #"+listeners.size()+" listeners");
     }
 
     public void onActivityResult(int requestCode){
@@ -164,7 +167,7 @@ public class MeshManager {
         isOn = false;
         Status status = getStatus();
         for (MeshManagerListener listener : listeners) {
-            listener.onStatusChange(status);
+            activity.runOnUiThread(()-> listener.onStatusChange(status) );
         }
         Log.d(TAG, "MeshManager: Mesh turned off, notified listeners");
     }
@@ -199,4 +202,5 @@ public class MeshManager {
         listeners.clear();
         Log.d(TAG, "MeshManager: All listeners cleared");
     }
+
 }

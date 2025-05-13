@@ -69,6 +69,8 @@ public abstract class MeshProtocol<T extends MeshSerializer<T>> implements MeshS
         return ProtocolType.SEND_MESSAGE;
       case 2:
         return ProtocolType.RECEIVE_MESSAGE;
+      case 3:
+        return ProtocolType.RAW_BYTES_MESSAGE;
       //add more protocol cases here
       default:
         return ProtocolType.UNKNOWN_MESSAGE_TYPE;
@@ -127,5 +129,9 @@ public abstract class MeshProtocol<T extends MeshSerializer<T>> implements MeshS
   }
   public int getMessageId() {
     return this.messageId;
+  }
+
+  public  int getRemainingHops(){
+    return this.remainingHops;
   }
 }

@@ -13,12 +13,17 @@ class MethodChannelMeshBaseFlutter extends MeshBaseFlutterPlatform {
   final _channel = const MethodChannel('mesh_base_flutter');
 
   static const _eventChannel = EventChannel('mesh_manager/events');
-  StreamSubscription? _sub;
 
   @override
   Future<String?> getPlatformVersion() async {
     final version = await _channel.invokeMethod<String>('getPlatformVersion');
     return version;
+  }
+
+  @override
+  Future<String> getId() async {
+    final String id = await _channel.invokeMethod('getId');
+    return id;
   }
 
   @override
@@ -61,34 +66,32 @@ class MethodChannelMeshBaseFlutter extends MeshBaseFlutterPlatform {
 
   @override
   Future<void> subscribe(MeshManagerListener listener) async {
-    _sub = _eventChannel.receiveBroadcastStream().listen((dynamic event) {
+    _eventChannel.receiveBroadcastStream().listen((dynamic event) {
       final Map map = event;
+      var payload = map['payload'];
       switch (map['type']) {
         case 'data':
           //TODO: assuming byte[]
-          listener.onDataReceivedForSelf?.call(map['protocol']);
+          listener.onDataReceivedForSelf?.call(MeshProtocol.fromMap(payload));
           break;
         case 'status':
-          listener.onStatusChange?.call(MeshStatus.fromMap(map['status']));
+          listener.onStatusChange?.call(MeshStatus.fromMap(payload));
           break;
         case 'neighborConnected':
-          listener.onNeighborConnected?.call(Device.fromMap(map['device']));
+          listener.onNeighborConnected?.call(Device.fromMap(payload));
           break;
         case 'neighborDisconnected':
-          listener.onNeighborDisconnected?.call(Device.fromMap(map['device']));
+          listener.onNeighborDisconnected?.call(Device.fromMap(payload));
           break;
         case 'error':
-          listener.onError?.call(map['error'] as String);
+          listener.onError?.call(MeshError.fromMap(payload));
           break;
         default:
           throw Exception("unknown event type:${map['type']} map:$map");
       }
     });
+    await _channel.invokeMethod('subscribe');
   }
 
-  @override
-  Future<void> unsubscribe() async {
-    await _sub?.cancel();
-    _sub = null;
-  }
+  //TODO: implement unsubscribe
 }

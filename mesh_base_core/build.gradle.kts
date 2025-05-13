@@ -31,12 +31,11 @@ android {
         targetCompatibility = JavaVersion.VERSION_11
     }
 
-    // Tell AGP to generate a 'release' software component for publishing
-//    publishing {
-//        singleVariant("release") {
-//            withSourcesJar()
-//        }
-//    }
+    publishing {
+        singleVariant("release") {
+            withSourcesJar()
+        }
+    }
 }
 
 val mockitoAgent = configurations.create("mockitoAgent")
@@ -59,34 +58,15 @@ dependencies {
 
 
 afterEvaluate {
-    tasks.register("publishAar") {
-        group = "publishing"
-        description = "Publishes the AAR to the local Maven repository"
-        dependsOn("assembleRelease") // ensure the AAR is built before publishing
+    publishing {
+        publications {
+            create<MavenPublication>("maven") {
+                groupId = groupId
+                artifactId = artifactId
+                version = version
 
-        doLast {
-            publishing {
-                publications {
-                    create<MavenPublication>("release") {
-                        groupId = project.group.toString()
-                        artifactId = project.name
-                        version = project.version.toString()
-                        artifact("$buildDir/outputs/aar/mesh_base_core-release.aar") {
-                            extension = "aar"
-                        }
-                    }
-                }
+                from(components["release"])
             }
         }
     }
 }
-
-
-//tasks.register("compileAndPublishToMaven") {
-//    group = "publishing"
-//    description = "Assembles the release AAR and publishes it to Maven Local"
-//    dependsOn("assembleRelease")
-//    dependsOn("publishReleasePublicationToMavenLocal")
-//}
-
-// Ensure the publish task depends on the AAR bundling task

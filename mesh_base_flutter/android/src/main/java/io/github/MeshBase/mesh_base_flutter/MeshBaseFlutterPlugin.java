@@ -29,9 +29,10 @@ import io.github.meshbase.mesh_base_core.mesh_manager.MeshManagerListener;
 import io.github.meshbase.mesh_base_core.mesh_manager.Status;
 import io.github.meshbase.mesh_base_core.router.ConcreteMeshProtocol;
 import io.github.meshbase.mesh_base_core.router.MeshProtocol;
-import io.github.meshbase.mesh_base_core.router.SendListener;
+import io.github.meshbase.mesh_base_core.router.RawBytesBody;
 import io.github.meshbase.mesh_base_core.temptest.TempTest;
 import io.github.meshbase.mesh_base_core.mesh_manager.MeshManager;
+import io.github.meshbase.mesh_base_core.router.SendListener;
 
 public class MeshBaseFlutterPlugin implements FlutterPlugin, MethodCallHandler, ActivityAware,  PluginRegistry.ActivityResultListener, EventChannel.StreamHandler {
   private MethodChannel methodChannel;
@@ -136,8 +137,9 @@ public class MeshBaseFlutterPlugin implements FlutterPlugin, MethodCallHandler, 
         }
         ChannelMeshProtocol channelProtocol = ChannelMeshProtocol.fromMap(protocolMap);
         boolean keepMessageId = Boolean.TRUE.equals(call.argument("keepMessageId"));
+        //Assuming only RawBytesBody  is used
         MeshProtocol<RawBytesBody> protocol =
-            new ConcreteMeshProtocol<>(1, -1, -1, UUID.fromString(channelProtocol.sender),
+            new ConcreteMeshProtocol<>(3, channelProtocol.remainingHops, channelProtocol.messageId, UUID.fromString(channelProtocol.sender),
                 UUID.fromString(channelProtocol.destination),
                 new RawBytesBody(channelProtocol.body));
 
@@ -234,8 +236,7 @@ public class MeshBaseFlutterPlugin implements FlutterPlugin, MethodCallHandler, 
   private ChannelMeshProtocol protocolToChannelProtocol(MeshProtocol<?> protocol) {
     return new ChannelMeshProtocol(
         protocol.getByteType(),
-        //TODO: make hops publicly visible
-        -1,
+        protocol.getRemainingHops(),
         protocol.getMessageId(),
         protocol.sender.toString(),
         protocol.destination.toString(),

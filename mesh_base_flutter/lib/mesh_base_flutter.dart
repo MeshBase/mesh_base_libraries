@@ -7,6 +7,10 @@ class MeshBaseFlutter {
     return MeshBaseFlutterPlatform.instance.getPlatformVersion();
   }
 
+  Future<String> getId() async {
+    return await MeshBaseFlutterPlatform.instance.getId();
+  }
+
   Future<void> turnOn() {
     return MeshBaseFlutterPlatform.instance.on();
   }
@@ -108,6 +112,19 @@ class SendError extends Error {
   String toString() => 'SendError: $message';
 }
 
+class MeshError extends Error {
+  final String message;
+
+  MeshError({required this.message});
+
+  factory MeshError.fromMap(Map map) {
+    return MeshError(message: map['message'] ?? 'Unknown error');
+  }
+
+  @override
+  String toString() => 'MeshError: $message';
+}
+
 class SendResult {
   final SendError? error;
   final bool acked;
@@ -132,8 +149,18 @@ class SendResult {
 }
 
 //TODO: consider what protocols and how they are used in java vs dart side
+enum ProtocolType {
+  SEND_MESSAGE,
+  RECEIVE_MESSAGE,
+  ACK,
+  UNKNOWN_MESSAGE_TYPE,
+  RAW_BYTES_MESSAGE,
+
+  // keep in sync with java's enums
+}
+
 class MeshProtocol {
-  final int messageType;
+  final ProtocolType messageType;
   final int remainingHops;
   final int messageId;
   final String sender;
@@ -150,7 +177,7 @@ class MeshProtocol {
   });
 
   Map<String, dynamic> toMap() => {
-    'messageType': messageType,
+    'messageType': messageType.name,
     'remainingHops': remainingHops,
     'messageId': messageId,
     'sender': sender,
@@ -158,16 +185,16 @@ class MeshProtocol {
     'body': body,
   };
 
-  factory MeshProtocol.fromMap(Map<String, dynamic> m) {
+  factory MeshProtocol.fromMap(Map map) {
     return MeshProtocol(
-      messageType: m['messageType'] as int,
-      remainingHops: m['remainingHops'] as int,
-      messageId: m['messageId'] as int,
-      sender: m['sender'] as String,
-      destination: m['destination'] as String,
+      messageType: ProtocolType.values.byName(map['messageType'] as String),
+      remainingHops: map['remainingHops'] as int,
+      messageId: map['messageId'] as int,
+      sender: map['sender'] as String,
+      destination: map['destination'] as String,
       body:
-          m['body'] != null
-              ? Uint8List.fromList(List<int>.from(m['body'] as List))
+          map['body'] != null
+              ? Uint8List.fromList(List<int>.from(map['body'] as List))
               : Uint8List(0),
     );
   }
@@ -178,7 +205,7 @@ class MeshManagerListener {
   final Function(MeshStatus status)? onStatusChange;
   final Function(Device device)? onNeighborConnected;
   final Function(Device device)? onNeighborDisconnected;
-  final Function(String error)? onError;
+  final Function(MeshError error)? onError;
 
   MeshManagerListener({
     this.onDataReceivedForSelf,

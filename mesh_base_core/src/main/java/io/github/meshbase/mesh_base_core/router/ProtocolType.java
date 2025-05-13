@@ -5,6 +5,6 @@ public enum ProtocolType {
     RECEIVE_MESSAGE,
     ACK,
     UNKNOWN_MESSAGE_TYPE,
+    RAW_BYTES_MESSAGE
     // add more type here
-
 }

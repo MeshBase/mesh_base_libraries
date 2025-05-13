@@ -28,6 +28,10 @@ abstract class MeshBaseFlutterPlatform extends PlatformInterface {
     throw UnimplementedError('platformVersion() has not been implemented.');
   }
 
+  Future<String> getId() {
+    throw UnimplementedError('getId() has not been implemented.');
+  }
+
   Future<void> on() async {
     throw UnimplementedError('turnOn() has not been implemented.');
   }

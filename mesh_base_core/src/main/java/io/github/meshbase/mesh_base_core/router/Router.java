@@ -13,6 +13,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.function.Function;
 
 
 public class Router {
@@ -129,6 +130,9 @@ public class Router {
                 break;
             case SEND_MESSAGE:
                 protocol = MeshProtocol.decode(byteArray, SendMessageBody::decode);
+                break;
+            case RAW_BYTES_MESSAGE:
+                protocol = MeshProtocol.decode(byteArray, RawBytesBody::decode);
                 break;
             default:
                 Log.e(TAG, "Unknown byte array. Can't decode data");
