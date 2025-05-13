@@ -29,7 +29,7 @@ public abstract class ConnectionHandler {
 
 
   public abstract ArrayList<Device> getNeighbourDevices();
-  public abstract void onActivityResult(int requestCode);
+  public abstract void onPermissionResult(int requestCode);
 
   public abstract void start() throws Exception;
 

@@ -35,7 +35,10 @@ import io.github.meshbase.mesh_base_core.temptest.TempTest;
 import io.github.meshbase.mesh_base_core.mesh_manager.MeshManager;
 import io.github.meshbase.mesh_base_core.router.SendListener;
 
-public class MeshBaseFlutterPlugin implements FlutterPlugin, MethodCallHandler, ActivityAware,  PluginRegistry.ActivityResultListener, EventChannel.StreamHandler {
+public class MeshBaseFlutterPlugin implements FlutterPlugin, MethodCallHandler, ActivityAware,  PluginRegistry.ActivityResultListener,
+PluginRegistry.RequestPermissionsResultListener
+
+    ,  EventChannel.StreamHandler {
   private MethodChannel methodChannel;
   private EventChannel eventChannel;
   private EventChannel.EventSink eventSink;
@@ -78,6 +81,8 @@ public class MeshBaseFlutterPlugin implements FlutterPlugin, MethodCallHandler, 
     if (meshManager == null){
       meshManager = new MeshManager(binding.getActivity());
     }
+    binding.addActivityResultListener(this);
+    binding.addRequestPermissionsResultListener(this);
   }
 
   @Override
@@ -100,6 +105,15 @@ public class MeshBaseFlutterPlugin implements FlutterPlugin, MethodCallHandler, 
     }
     return false;
   }
+
+  @Override
+  public boolean onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+    if (meshManager != null){
+      meshManager.onActivityResult(requestCode);
+    }
+    return false;
+  }
+
 
   ///
   @Override

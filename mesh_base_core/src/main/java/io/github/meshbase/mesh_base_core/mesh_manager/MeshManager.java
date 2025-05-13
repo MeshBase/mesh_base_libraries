@@ -3,8 +3,6 @@ package io.github.meshbase.mesh_base_core.mesh_manager;
 import android.app.Activity;
 import android.util.Log;
 
-import androidx.activity.ComponentActivity;
-
 import io.github.meshbase.mesh_base_core.global_interfaces.ConnectionHandler;
 import io.github.meshbase.mesh_base_core.global_interfaces.ConnectionHandlerFactory;
 import io.github.meshbase.mesh_base_core.global_interfaces.ConnectionHandlerListener;
@@ -153,9 +151,9 @@ public class MeshManager {
         Log.d(TAG, "MeshManager: Mesh turned on, notified #"+listeners.size()+" listeners");
     }
 
-    public void onActivityResult(int requestCode){
+    public void onPermissionResult(int requestCode){
         for (ConnectionHandler helper : connectionHandlers.values()) {
-            helper.onActivityResult(requestCode);
+            helper.onPermissionResult(requestCode);
         }
     }
 

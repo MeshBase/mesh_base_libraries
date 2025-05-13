@@ -319,8 +319,8 @@ public class BLEConnectionHandler extends ConnectionHandler {
   }
 
   @Override
-  public void onActivityResult(int requestCode) {
-    permission.onActivityResult(requestCode);
+  public void onPermissionResult(int requestCode) {
+    permission.onPermissionResult(requestCode);
   }
 
 

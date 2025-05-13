@@ -149,7 +149,8 @@ public class BLEPermissions {
     }
   }
 
-  public void onActivityResult(int requestCode){
+  public void onPermissionResult(int requestCode){
+    Log.d(TAG, "activity result called! requestCode:"+ requestCode +" hasPermissions:"+hasPermissions() + " locationIsOn:"+locationIsOn());
     if (requestCode == PERMISSIONS_REQUEST_CODE && !hasPermissions()){
       listener.onDisabled();
     }else if(requestCode == LOCATION_REQUEST_CODE && !locationIsOn() ){
