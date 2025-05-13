@@ -5,7 +5,7 @@ void main() {
   runApp(
     MaterialApp(
       home: Scaffold(
-        appBar: AppBar(title: const Text('BLE Test')),
+        appBar: AppBar(title: const Text('Mesh Test')),
         body: Padding(
           padding: const EdgeInsets.all(16),
           child: const ExampleTestScreen(),
