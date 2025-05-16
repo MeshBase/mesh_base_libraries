@@ -137,7 +137,7 @@ class _BleTestScreenState extends State<ExampleTestScreen> {
                         _showSnack('Send error: ${res.error}');
                       } else if (res.response?.body != null) {
                         _showSnack(
-                          'Response received: ${utf8.decode(res.response!.body)}',
+                          "Response received from :${d.uuid} ${utf8.decode(res.response!.body)}",
                         );
                       }
                     });
@@ -147,6 +147,31 @@ class _BleTestScreenState extends State<ExampleTestScreen> {
               );
             },
           ),
+        ),
+
+        TextButton(
+          onPressed: () async {
+            final protocol = MeshProtocol(
+              messageType: ProtocolType.RAW_BYTES_MESSAGE,
+              remainingHops: -1,
+              messageId: -1,
+              sender: _selfId,
+              destination: BROADCAST_UUID,
+              body: Uint8List.fromList(utf8.encode(_message)),
+            );
+            mesh.send(protocol: protocol, keepMessageId: false).then((res) {
+              if (res.acked) {
+                _showSnack('Ack for broadcast"$_message"');
+              } else if (res.error != null) {
+                _showSnack('Send error: ${res.error}');
+              } else if (res.response?.body != null) {
+                _showSnack(
+                  'Response received (should not happen for broadcast): ${utf8.decode(res.response!.body)}',
+                );
+              }
+            });
+          },
+          child: Text("broadcast"),
         ),
         TextField(
           decoration: const InputDecoration(labelText: 'Message'),

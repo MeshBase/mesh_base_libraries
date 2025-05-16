@@ -18,6 +18,7 @@ import java.util.function.Function;
 
 public class Router {
     String TAG = "my_router";
+    final UUID BROADCAST_UUID = UUID.fromString("00000000-0000-0000-0000-000000000001");
     UUID id;
     HashMap<ConnectionHandlersEnum, ConnectionHandler> connectionHandlers;
     //TODO: get this data from protocol registry in the future
@@ -140,8 +141,10 @@ public class Router {
         }
 
         boolean selfIsDestination = protocol.destination != null && protocol.destination.equals(id);
+        boolean isBroadcast = protocol.destination == null || protocol.destination.equals(BROADCAST_UUID);
         boolean expectsResponse = typesExpectingResponses.contains(messageProtocolType);
 
+        Log.d(TAG, "isBroadcast:"+isBroadcast+" "+protocol.destination +" vs "+BROADCAST_UUID);
         if (hasRoutedDataBefore(protocol.messageId, protocol.sender)) {
             Log.d(TAG, "already routed data. skipping. messageId=" + protocol.messageId + " sender=" + protocol.sender);
         } else if (selfIsDestination && messageProtocolType == ProtocolType.ACK) {
@@ -156,7 +159,18 @@ public class Router {
             //Safe to reply with ACK if not expecting a response
             routerListener.onData(protocol, neighbor);
             replyWithAck(protocol);
-        } else if (protocol.remainingHops <= 0) {
+        } else if (isBroadcast){
+            routerListener.onData(protocol, neighbor);
+            setRouted(protocol.messageId, protocol.sender);
+            protocol.remainingHops -= 1;
+            Log.d(TAG, "relaying broadcast " + protocol.messageId + "sender=" + protocol.sender + " remainingHops=" + protocol.remainingHops);
+            try {
+                floodData(protocol.encode());
+            } catch (SendError e) {
+                Log.e(TAG, "Error relaying broadcast: " + e.getMessage());
+                routerListener.onError(e);
+            }
+        }else if (protocol.remainingHops <= 0) {
             Log.d(TAG, "finished remaining hops, cant route anymore. messageId=" + protocol.messageId + " sender=" + protocol.sender);
         } else {
             setRouted(protocol.messageId, protocol.sender);
