@@ -14,6 +14,8 @@ class MethodChannelMeshBaseFlutter extends MeshBaseFlutterPlatform {
 
   static const _eventChannel = EventChannel('mesh_manager/events');
 
+  List<MeshManagerListener> listeners = [];
+
   @override
   Future<String?> getPlatformVersion() async {
     final version = await _channel.invokeMethod<String>('getPlatformVersion');
@@ -66,28 +68,31 @@ class MethodChannelMeshBaseFlutter extends MeshBaseFlutterPlatform {
 
   @override
   Future<void> subscribe(MeshManagerListener listener) async {
+    listeners.add(listener);
     _eventChannel.receiveBroadcastStream().listen((dynamic event) {
-      final Map map = event;
-      var payload = map['payload'];
-      switch (map['type']) {
-        case 'data':
-          //TODO: assuming byte[]
-          listener.onDataReceivedForSelf?.call(MeshProtocol.fromMap(payload));
-          break;
-        case 'status':
-          listener.onStatusChange?.call(MeshStatus.fromMap(payload));
-          break;
-        case 'neighborConnected':
-          listener.onNeighborConnected?.call(Device.fromMap(payload));
-          break;
-        case 'neighborDisconnected':
-          listener.onNeighborDisconnected?.call(Device.fromMap(payload));
-          break;
-        case 'error':
-          listener.onError?.call(MeshError.fromMap(payload));
-          break;
-        default:
-          throw Exception("unknown event type:${map['type']} map:$map");
+      for (var listener in listeners) {
+        final Map map = event;
+        var payload = map['payload'];
+        switch (map['type']) {
+          case 'data':
+            //TODO: assuming byte[]
+            listener.onDataReceivedForSelf?.call(MeshProtocol.fromMap(payload));
+            break;
+          case 'status':
+            listener.onStatusChange?.call(MeshStatus.fromMap(payload));
+            break;
+          case 'neighborConnected':
+            listener.onNeighborConnected?.call(Device.fromMap(payload));
+            break;
+          case 'neighborDisconnected':
+            listener.onNeighborDisconnected?.call(Device.fromMap(payload));
+            break;
+          case 'error':
+            listener.onError?.call(MeshError.fromMap(payload));
+            break;
+          default:
+            throw Exception("unknown event type:${map['type']} map:$map");
+        }
       }
     });
     await _channel.invokeMethod('subscribe');

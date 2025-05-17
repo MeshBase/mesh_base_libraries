@@ -59,7 +59,8 @@ class _BleTestScreenState extends State<ExampleTestScreen> {
     final text = utf8.decode(protocol.body);
     _showSnack('Recv: "$text" from ${protocol.sender}');
 
-    if (protocol.messageType == ProtocolType.RAW_BYTES_MESSAGE) {
+    if (protocol.messageType == ProtocolType.RAW_BYTES_MESSAGE &&
+        protocol.destination != BROADCAST_UUID) {
       // auto‐reply
       final replyText = 'Reply to "$text"';
       final reply = MeshProtocol(

@@ -106,7 +106,7 @@ public class Router {
         AckMessageBody ackMessageBody = new AckMessageBody("OK");
         MeshProtocol<AckMessageBody> ackData = new ConcreteMeshProtocol<>(
                 0, // Message Type is ACK
-                4, // Goes to 4 device before stopping
+                100, // Goes to 4 device before stopping
                 protocol.messageId,
                 id, // Destination becomes sender
                 protocol.sender, // Sender becomes Destination
@@ -170,6 +170,7 @@ public class Router {
                 Log.e(TAG, "Error relaying broadcast: " + e.getMessage());
                 routerListener.onError(e);
             }
+            replyWithAck(protocol);
         }else if (protocol.remainingHops <= 0) {
             Log.d(TAG, "finished remaining hops, cant route anymore. messageId=" + protocol.messageId + " sender=" + protocol.sender);
         } else {
