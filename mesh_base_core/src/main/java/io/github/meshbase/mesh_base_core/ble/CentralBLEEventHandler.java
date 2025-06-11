@@ -117,6 +117,7 @@ class CentralBLEEventHandler {
 
     @Override
     public void onMtuChanged(BluetoothGatt gatt, int mtu, int status) {
+      Log.d(TAG, "[X] We have successfully negotiated here. Life is good");
       super.onMtuChanged(gatt, mtu, status);
 
       boolean isMtuTask = handler.getPending() instanceof NegotiateMTU;

@@ -31,7 +31,7 @@ import java.util.UUID;
 @SuppressLint("MissingPermission")
 public class Central {
   static final int MAX_MTU_SIZE = 517;
-  private static final int MAX_PERIPHERAL_RETRIES = 7;
+  private static final int MAX_PERIPHERAL_RETRIES = 1000;
   private static final long SCAN_TIME_GAP = 6_500; //6.5 seconds
   public final Map<String, Integer> connectTryCount = new HashMap<>();
   final String TAG;
@@ -226,6 +226,7 @@ public class Central {
   }
 
   void startNegotiateMTU(NegotiateMTU task) {
+    Log.d(TAG, "Trying very very hard to negotiate");
     task.gatt.requestMtu(task.size);
   }
 

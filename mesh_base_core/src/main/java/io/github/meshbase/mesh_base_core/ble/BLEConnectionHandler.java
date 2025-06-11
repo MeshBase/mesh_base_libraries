@@ -193,6 +193,7 @@ public class BLEConnectionHandler extends ConnectionHandler {
           central.startDiscoverServices((DiscoverServices) task);
           expireTask(task, () -> central.expireDiscoverServices((DiscoverServices) task));
         } else if (task instanceof NegotiateMTU) {
+          Log.d(TAG + taskTag, "About to negotiate");
           central.startNegotiateMTU((NegotiateMTU) task);
           expireTask(task, () -> central.expireNegotiateMTU((NegotiateMTU) task));
         } else if (task instanceof EnableIndication) {
