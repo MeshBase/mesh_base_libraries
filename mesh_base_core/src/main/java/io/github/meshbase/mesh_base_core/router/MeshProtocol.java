@@ -25,6 +25,24 @@ public abstract class MeshProtocol<T extends MeshSerializer<T>> implements MeshS
     this.body = body;
   }
 
+  public static  MeshProtocol<?> decode(byte[] data) {
+    ProtocolType type = getByteType(data);
+
+    switch (type) {
+      case ACK:
+        return decode(data, AckMessageBody::decode);
+
+      case SEND_MESSAGE:
+        return decode(data, SendMessageBody::decode);
+      case RREQ:
+        return decode(data, RREQBody::decode);
+      case RREP:
+        return decode(data, RREPBody::decode);
+      default:
+        throw new IllegalArgumentException("Unsupported protocol type: " + type);
+    }
+
+  }
   public static <T extends MeshSerializer<T>> MeshProtocol<T> decode(byte[] data,
                                                                      Function<byte[], T> bodyDecoder) {
     if (data.length < HEADER_LENGTH) {
@@ -55,6 +73,7 @@ public abstract class MeshProtocol<T extends MeshSerializer<T>> implements MeshS
     return new ConcreteMeshProtocol<>(messageType, remainingHops, messageId, sender, destination, body);
   }
 
+
   public static ProtocolType getByteType(byte[] data) {
     if (data.length < 4) {
       throw new IllegalArgumentException("Buffer data cannot be determined due to small length size.[CANNOT_DETERMINE_TYPE]");
@@ -71,7 +90,10 @@ public abstract class MeshProtocol<T extends MeshSerializer<T>> implements MeshS
         return ProtocolType.RECEIVE_MESSAGE;
       case 3:
         return ProtocolType.RAW_BYTES_MESSAGE;
-      //add more protocol cases here
+      case 4:
+        return ProtocolType.RREQ;
+      case 5:
+        return ProtocolType.RREP;
       default:
         return ProtocolType.UNKNOWN_MESSAGE_TYPE;
     }
