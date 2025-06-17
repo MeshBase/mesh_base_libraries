@@ -31,13 +31,16 @@ public abstract class MeshProtocol<T extends MeshSerializer<T>> implements MeshS
     switch (type) {
       case ACK:
         return decode(data, AckMessageBody::decode);
-
+      case PING:
+        return decode(data, PingMessageBody::decode);
       case SEND_MESSAGE:
         return decode(data, SendMessageBody::decode);
       case RREQ:
         return decode(data, RREQBody::decode);
       case RREP:
         return decode(data, RREPBody::decode);
+      case RAW_BYTES_MESSAGE:
+        return decode(data, RawBytesBody::decode);
       default:
         throw new IllegalArgumentException("Unsupported protocol type: " + type);
     }
@@ -94,6 +97,8 @@ public abstract class MeshProtocol<T extends MeshSerializer<T>> implements MeshS
         return ProtocolType.RREQ;
       case 5:
         return ProtocolType.RREP;
+      case 6:
+        return ProtocolType.PING;
       default:
         return ProtocolType.UNKNOWN_MESSAGE_TYPE;
     }

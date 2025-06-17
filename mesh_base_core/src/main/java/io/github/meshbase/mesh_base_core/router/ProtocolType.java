@@ -8,5 +8,6 @@ public enum ProtocolType {
     RAW_BYTES_MESSAGE,
     RREQ,
     RREP,
+    PING,
     // add more type here
 }

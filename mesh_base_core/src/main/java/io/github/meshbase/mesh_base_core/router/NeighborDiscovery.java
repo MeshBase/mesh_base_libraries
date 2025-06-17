@@ -13,20 +13,17 @@ import io.github.meshbase.mesh_base_core.global_interfaces.ConnectionHandlersEnu
 import io.github.meshbase.mesh_base_core.global_interfaces.Device;
 import io.github.meshbase.mesh_base_core.global_interfaces.SendError;
 
-private class NeighborDiscovery {
+public class NeighborDiscovery {
     private final String TAG = "Mesh_Heartbeat";
     private final Map<ConnectionHandlersEnum, ConnectionHandler> handlers;
-    private final RoutingTable routingTable;
 
     private final UUID deviceUUID;
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
 
     NeighborDiscovery(Map<ConnectionHandlersEnum, ConnectionHandler> handlers,
-                      RoutingTable routingTable,
                       UUID deviceUUID
     ) {
         this.handlers = handlers;
-        this.routingTable = routingTable;
         this.deviceUUID = deviceUUID;
     }
 
