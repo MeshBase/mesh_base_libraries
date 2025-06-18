@@ -4,7 +4,7 @@ import java.nio.ByteBuffer;
 import java.util.UUID;
 
 public class RREQBody implements MeshSerializer<RREQBody>{
-    private final int querySequenceNumber;
+    protected final int querySequenceNumber;
     protected final UUID querySequenceId;
     protected UUID previousHop;
     private final int hopCount;

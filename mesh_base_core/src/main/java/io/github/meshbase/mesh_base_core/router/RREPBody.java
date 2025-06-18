@@ -1,5 +1,7 @@
 package io.github.meshbase.mesh_base_core.router;
 
+import android.util.Log;
+
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
@@ -9,18 +11,17 @@ public class RREPBody implements MeshSerializer<RREPBody>{
     public final int querySequenceNumber;
     public final UUID queryId;
 
-    public final List<UUID> routePath;
+    public final UUID routePath;
 
-    private final static int RREP_BODY_PARTIAL_LENGTH = 20;
-    public RREPBody(int querySequenceNumber, UUID queryId, List<UUID> routePath) {
+    private final static int RREP_BODY_PARTIAL_LENGTH = 36;
+    public RREPBody(int querySequenceNumber, UUID queryId, UUID routePath) {
         this.querySequenceNumber = querySequenceNumber;
         this.queryId = queryId;
         this.routePath = routePath;
     }
     @Override
     public byte[] encode() {
-        int routePathLength = routePath.size();
-        int totalRREPLength = (routePathLength * 16) + RREP_BODY_PARTIAL_LENGTH;
+        int totalRREPLength = RREP_BODY_PARTIAL_LENGTH;
 
         ByteBuffer buffer = ByteBuffer.allocate(totalRREPLength);
         buffer.putInt(querySequenceNumber);
@@ -28,11 +29,9 @@ public class RREPBody implements MeshSerializer<RREPBody>{
         buffer.putLong(queryId.getMostSignificantBits());
         buffer.putLong(queryId.getLeastSignificantBits());
 
-        buffer.putInt(routePathLength);
-        for (UUID deviceId: routePath) {
-            buffer.putLong(deviceId.getMostSignificantBits());
-            buffer.putLong(deviceId.getLeastSignificantBits());
-        }
+        buffer.putLong(routePath.getMostSignificantBits());
+        buffer.putLong(routePath.getLeastSignificantBits());
+        Log.d("my_mesh_router", "call it maaaagic");
         return buffer.array();
     }
 
@@ -43,18 +42,11 @@ public class RREPBody implements MeshSerializer<RREPBody>{
         long queryMostSigBits = buffer.getLong();
         long queryLeastSigBits = buffer.getLong();
 
-        UUID queryId = new UUID(queryMostSigBits, queryLeastSigBits);
+        final UUID queryId = new UUID(queryMostSigBits, queryLeastSigBits);
 
-        int routePathLength = buffer.getInt();
 
-        final List<UUID> routePath = new ArrayList<>();
-        for (int i = 0; i < routePathLength; i++) {
-            long deviceMostSigBits = buffer.getLong();
-            long deviceLeastSigBits = buffer.getLong();
+        final UUID routePath = new UUID(buffer.getLong(), buffer.getLong());
 
-            UUID routeDevice = new UUID(deviceMostSigBits, deviceLeastSigBits);
-            routePath.add(routeDevice);
-        }
         return new RREPBody(
                 querySequenceNumber,
                 queryId,

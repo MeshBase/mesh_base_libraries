@@ -3,7 +3,6 @@ package io.github.meshbase.mesh_base_core.router;
 import android.util.Log;
 
 
-
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -38,9 +37,9 @@ public class MeshRouter {
 
     private final UUID myUUID;
 
-   private final HashSet<ProtocolType> typesExpectingResponses;
+    private final HashSet<ProtocolType> typesExpectingResponses;
 
-    private static final String TAG = "Mesh_Router";
+    private static final String TAG = "my_mesh_Router";
 
     Router.RouterListener routerListener = new Router.RouterListener() {
         @Override
@@ -60,6 +59,7 @@ public class MeshRouter {
     public MeshRouter(Map<ConnectionHandlersEnum, ConnectionHandler> connectionHandlers, UUID myUUID, HashSet<ProtocolType> typesExpectingResponses) {
         this.connectionHandlers = connectionHandlers;
         this.myUUID = myUUID;
+        this.typesExpectingResponses = typesExpectingResponses;
 
         this.neighborDiscovery = new NeighborDiscovery();
         this.deduplication = new Deduplication();
@@ -67,7 +67,6 @@ public class MeshRouter {
         this.routeDiscovery = new RouteDiscovery(this.routingTable);
         this.messageForwarding = new MessageForwarding(this, this.routingTable);
 
-        this.typesExpectingResponses = typesExpectingResponses;
 
         for (ConnectionHandler handler : connectionHandlers.values()) {
             handler.subscribe(
@@ -85,19 +84,37 @@ public class MeshRouter {
     public void setListener(Router.RouterListener listener) {
         this.routerListener = listener;
     }
-    // Main entry point for sending data
+
+    private SendListener getListener(int msgId) throws Exception {
+        SendListener listener = messageListeners.get(msgId);
+        if (listener == null) {
+            throw new InternalRouterError("Could not find listener for messageId: " + msgId);
+        }
+
+        return listener;
+
+    }
 
     public void sendData(MeshProtocol<?> protocol, SendListener listener) {
         sendData(protocol, listener, false);
     }
+
     public void sendData(MeshProtocol<?> protocol, SendListener listener, boolean keepMessageId) {
-        // Store listener before any sending occurs
         if (!keepMessageId) {
             protocol.messageId = ThreadLocalRandom.current().nextInt();
         }
 
-        deduplication.isDuplicate(protocol.messageId, protocol.sender);
+        if (protocol.destination.equals(BROADCAST_UUID)) {
+            try{
+                floodData(protocol);
+            } catch (SendError e) {
+               notifyError(protocol.messageId, e);
+            }
+        }
+
+        deduplication.isDuplicate(protocol.messageId, protocol.sender, protocol.getByteType());
         messageListeners.put(protocol.messageId, listener);
+        protocol.remainingHops = 8;
 
         messageForwarding.forwardMessage(protocol);
     }
@@ -105,25 +122,34 @@ public class MeshRouter {
     private void processIncomingData(Device sender, byte[] data) {
         try {
 
+            Log.d(TAG, "Recieved data to decode stuff");
             MeshProtocol<?> protocol = MeshProtocol.decode(data);
 
             // Deduplication check
-            if (deduplication.isDuplicate(protocol.messageId, protocol.sender)) {
+            if (deduplication.isDuplicate(protocol.messageId, protocol.sender, protocol.getByteType())) {
                 Log.d(TAG, "Data is dropped duplicate message");
                 return;
-            } else if (deduplication.isDuplicate(protocol.messageId, myUUID)) {
+            } else if (deduplication.isDuplicate(protocol.messageId, myUUID, protocol.getByteType())) {
                 notifyResponse(protocol.messageId, protocol);
                 return;
             }
+
+            if (protocol.destination.equals(BROADCAST_UUID)) {
+                routerListener.onData(protocol, null);
+            }
+
+            Log.d(TAG, "Forwarding to responsible devices");
 
             boolean isBroadcast = protocol.destination == null || protocol.destination.equals(BROADCAST_UUID);
             // Route protocol types to components
             switch (protocol.getByteType()) {
                 case PING:
+                    Log.d("my_ping", "Trying to ping data");
                     neighborDiscovery.createPingMessage(protocol.destination);
                     break;
                 case RREQ:
                 case RREP:
+                    Log.d(TAG, "Trying to discover route");
                     routeDiscovery.handleControlMessage(protocol, sender);
                     break;
                 case ACK:
@@ -131,10 +157,12 @@ public class MeshRouter {
                     break;
                 case RAW_BYTES_MESSAGE:
                 case SEND_MESSAGE:
+                    Log.d(TAG, "Trying to send/receive message");
                     handleExpectingResponseData(protocol);
                     break;
 
                 default:
+                    Log.d(TAG, "DEFAULT: Trying to send/receive message");
                     if (isBroadcast) {
                         handleBroadcast(protocol);
                     }
@@ -157,6 +185,7 @@ public class MeshRouter {
         }
         messageForwarding.forwardMessage(protocol);
     }
+
     // Broadcast handling (TTL-based flood)
     private void handleBroadcast(MeshProtocol<?> protocol) {
         protocol.remainingHops--;  // Decrement TTL
@@ -179,15 +208,55 @@ public class MeshRouter {
 
     private void handleLocalMessage(MeshProtocol<?> protocol) {
         routerListener.onData(protocol, null);
-        sendAck(protocol.sender, protocol.messageId);
-        notifyAck(protocol.messageId);
+        if (typesExpectingResponses.contains(protocol.getByteType())) {
+            sendAck(protocol.sender, protocol.messageId);
+            notifyAck(protocol.messageId);
+        }
+    }
+
+    public void broadCast(MeshProtocol<?> protocol) throws SendError {
+        boolean hasTriedSendingData = false;
+        for (var handler : connectionHandlers.values()) {
+            if (handler.isOn()) {
+                try {
+                    for (var neighbor : handler.getNeighbourDevices()) {
+                        hasTriedSendingData = true;
+                        handler.send(protocol.encode(), neighbor);
+                    }
+                } catch (SendError e) {
+                    notifyError(protocol.messageId, e);
+                }
+
+            }
+        }
+
+        if (!hasTriedSendingData) throw new SendError("Data not flooded. No neighbors founds");
+    }
+    public void floodData(MeshProtocol<?> protocol) throws SendError {
+
+        boolean hasTriedSendingData = false;
+        for (var handler : connectionHandlers.values()) {
+            if (handler.isOn()) {
+                try {
+                    for (var neighbor : handler.getNeighbourDevices()) {
+                        hasTriedSendingData = true;
+                        handler.send(protocol.encode(), neighbor);
+                    }
+                } catch (SendError e) {
+                    notifyError(protocol.messageId, e);
+                }
+
+            }
+        }
+
+        if (!hasTriedSendingData) throw new SendError("Data not flooded. No neighbors founds");
     }
 
     private void sendAck(UUID destination, int messageId) {
         AckMessageBody ackMessageBody = new AckMessageBody("OK");
         MeshProtocol<AckMessageBody> ackData = new ConcreteMeshProtocol<>(
                 0, // Message Type is ACK
-                100, // TTL
+                8, // TTL
                 messageId,
                 myUUID,
                 destination,
@@ -221,6 +290,7 @@ public class MeshRouter {
 
     private void notifyError(int messageId, SendError error) {
         SendListener listener = messageListeners.remove(messageId);
+        System.out.println(listener == null);
         if (listener != null) {
             listener.onError(error);
         } else {
@@ -232,6 +302,7 @@ public class MeshRouter {
         SendListener listener = messageListeners.remove(messageId);
         if (listener != null) {
             listener.onResponse(response);
+            sendAck(response.sender, messageId);
         }
     }
 
@@ -242,19 +313,12 @@ public class MeshRouter {
             messageForwarding.forwardMessage(protocol);
         }
     }
-    private SendListener getListener(int msgId) throws Exception {
-        SendListener listener = messageListeners.get(msgId);
-        if (listener == null) {
-            throw new InternalRouterError("Could not find listener for messageId: " + msgId);
-        }
 
-        return listener;
-
-    }
 
     private class NeighborDiscovery {
 
         private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+        AtomicInteger idGenerator = new AtomicInteger();
 
         NeighborDiscovery(
         ) {
@@ -276,17 +340,18 @@ public class MeshRouter {
                         }
                     }
                 }
-            }, 0, 5, TimeUnit.SECONDS);
+            }, 0, 30, TimeUnit.SECONDS);
         }
 
         MeshProtocol<PingMessageBody> createPingMessage(UUID destination) {
             PingMessageBody pingMessage = new PingMessageBody(
                     "ping");
 
+            int nextId = idGenerator.incrementAndGet();
             return new ConcreteMeshProtocol<>(
+                    6,
                     1,
-                    1,
-                    0,
+                    nextId,
                     myUUID,
                     destination,
                     pingMessage
@@ -298,8 +363,8 @@ public class MeshRouter {
         private final ConcurrentHashMap<String, Long> seenMessages = new ConcurrentHashMap<>();
         private final long ttlMillis = TimeUnit.MINUTES.toMillis(5);
 
-        boolean isDuplicate(int messageId, UUID sender) {
-            String key = messageId + "|" + sender;
+        boolean isDuplicate(int messageId, UUID sender, ProtocolType protocolType) {
+            String key = messageId + "|" + sender + "|" + protocolType.toString();
             long currentTime = System.currentTimeMillis();
 
             // Clean up old entry if expired
@@ -317,15 +382,16 @@ public class MeshRouter {
         }
     }
 
-    private static class RoutingTable {
+    public static class RoutingTable {
         private final ConcurrentMap<UUID, RouteEntry> routes = new ConcurrentHashMap<>();
 
-        RoutingTable() {
+        public RoutingTable() {
             ScheduledExecutorService cleaner = Executors.newSingleThreadScheduledExecutor();
             cleaner.scheduleWithFixedDelay(this::cleanExpiredRoutes, 1, 1, TimeUnit.MINUTES);
         }
 
-        void addRoute(UUID destination, UUID nextHop, int cost, long expiresAt) {
+        public void addRoute(UUID destination, UUID nextHop, int cost, long expiresAt) {
+            if (expiresAt <= System.currentTimeMillis()) return;
             routes.put(destination, new RouteEntry(nextHop, cost, expiresAt));
         }
 
@@ -333,11 +399,11 @@ public class MeshRouter {
             routes.put(neighborId, new RouteEntry(neighborId, cost, expiresAt));
         }
 
-        void removeRoute(UUID routeKey) {
+        public void removeRoute(UUID routeKey) {
             routes.remove(routeKey);
         }
 
-        Optional<RouteEntry> getRoute(UUID destination) {
+        public Optional<RouteEntry> getRoute(UUID destination) {
             return Optional.ofNullable(routes.get(destination));
         }
 
@@ -353,26 +419,33 @@ public class MeshRouter {
         private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
         private final AtomicInteger rreqIdGenerator = new AtomicInteger(0);
 
-        RouteDiscovery( RoutingTable routingTable) {
+        RouteDiscovery(RoutingTable routingTable) {
             this.routingTable = routingTable;
         }
 
-        void discoverRoute(UUID destination, MeshProtocol<?> originalMessage) {
+        void discoverRoute(UUID destination, MeshProtocol<?> originalMessage) throws SendError {
             int querySequenceNumber = rreqIdGenerator.incrementAndGet();
             PendingRouteRequest pending = new PendingRouteRequest(querySequenceNumber, destination, originalMessage);
             pendingRequests.put(querySequenceNumber, pending);
 
             // Broadcast RREQ
             MeshProtocol<RREQBody> rreq = createRREQ(querySequenceNumber, destination);
+            boolean hasAttemptedSending = false;
             for (ConnectionHandler handler : connectionHandlers.values()) {
+                if (handler.getNeighbourDevices().isEmpty()) break;
                 if (handler.isOn()) {
                     try {
+                        hasAttemptedSending = true;
                         handler.send(rreq.encode());
                     } catch (SendError e) {
                         Log.e("Mesh_Router_Discovery", "Failed to send a Request");
                         notifyError(originalMessage.messageId, e);
                     }
                 }
+            }
+
+            if (!hasAttemptedSending) {
+                throw new SendError("Failed to send a Request");
             }
 
             // Set timeout
@@ -418,25 +491,34 @@ public class MeshRouter {
 
             // Check if we're the destination
             if (protocol.destination.equals(myUUID)) {
-                sendRREP(protocol.sender, body.querySequenceId, sender);
+                Log.d(TAG, "I AM destination");
+                sendRREP(protocol.sender, body.querySequenceId, sender, body.querySequenceNumber);
             }
             // Check if we have fresh route
             else if (routingTable.getRoute(protocol.destination)
                     .filter(route -> route.expiresAt > System.currentTimeMillis())
                     .isPresent()) {
-                sendRREP(protocol.sender, body.querySequenceId, sender);
+                Log.d(TAG, "I FOUND destination");
+                sendRREP(protocol.sender, body.querySequenceId, sender, body.querySequenceNumber);
             }
             // Re-broadcast RREQ
             else {
+                Log.d(TAG, "I have no destination");
                 routingTable.addRoute(protocol.sender, sender.uuid, 1,
                         System.currentTimeMillis() + 60000);
+
+                pendingRequests.put(body.querySequenceNumber, new PendingRouteRequest(
+                        body.querySequenceNumber,
+                        protocol.destination,
+                        protocol));
+
                 broadcastRREQ(protocol);
             }
         }
 
         private void broadcastRREQ(MeshProtocol<?> protocol) {
             UUID rreqSender = protocol.sender;
-            protocol.remainingHops --;
+            protocol.remainingHops--;
             if (protocol.remainingHops <= 0) return;
 
             for (ConnectionHandler handler : connectionHandlers.values()) {
@@ -455,14 +537,13 @@ public class MeshRouter {
         }
 
 
-        private void sendRREP(UUID destination, UUID queryId, Device nextHop) {
-            List<UUID> routePath = new ArrayList<>();
-            routePath.add(myUUID);
+        private void sendRREP(UUID destination, UUID queryId, Device nextHop, int querySequenceNumber) {
+            Log.d(TAG, "SENDING RREP");
 
             RREPBody rrepBody = new RREPBody(
-                    rreqIdGenerator.incrementAndGet(),            // You might need to pass actual Qseq here, adjust accordingly
+                    querySequenceNumber,
                     queryId,
-                    routePath
+                    myUUID
             );
 
             MeshProtocol<RREPBody> rrep = new ConcreteMeshProtocol<>(
@@ -478,7 +559,7 @@ public class MeshRouter {
                 for (ConnectionHandler handler : connectionHandlers.values()) {
                     List<Device> neighbors = handler.getNeighbourDevices();
                     for (var ignored : neighbors) {
-                        handler.send(rrep.encode());
+                        handler.send(rrep.encode(), ignored);
                     }
                 }
             } catch (SendError e) {
@@ -498,15 +579,14 @@ public class MeshRouter {
                         pending.destination,
                         sender.uuid,
                         protocol.remainingHops,
-                        System.currentTimeMillis() + 120000
+                        System.currentTimeMillis() + 300_000
                 );
 
-                // Forward original message
-
-            } else {
-                // Forward RREP towards source
-                messageForwarding.forwardMessage(protocol);
             }
+
+            // Forward original message
+            if (protocol.destination.equals(myUUID)) return;
+            messageForwarding.forwardMessage(protocol);
         }
 
     }
@@ -523,10 +603,10 @@ public class MeshRouter {
         }
     }
 
-    private static class RouteEntry {
-        UUID nextHop;
-        int cost;
-        long expiresAt;
+    public static class RouteEntry {
+        public UUID nextHop;
+        public int cost;
+        public long expiresAt;
 
         RouteEntry(UUID nextHop, int cost, long expiresAt) {
             this.nextHop = nextHop;
@@ -559,9 +639,20 @@ public class MeshRouter {
                 forwardToNextHop(protocol, route.get().nextHop);
             } else {
                 // Trigger route discovery
-                router.routeDiscovery.discoverRoute(protocol.destination, protocol);
+                try {
+                    router.routeDiscovery.discoverRoute(protocol.destination, protocol);
+                } catch (SendError e) {
+                    Log.e("Message_Forwarding", "failed to discover route");
+                    notifyError(protocol.messageId, e);
+                }
                 // still flood data
                 // flood data function
+                try {
+                    router.floodData(protocol);
+                } catch (SendError e) {
+                    Log.e("Message_Forwarding", "failed to flood data");
+                    notifyError(protocol.messageId, e);
+                }
             }
         }
 
@@ -570,7 +661,8 @@ public class MeshRouter {
                 // Find connection handler that can reach nextHop
                 for (ConnectionHandler handler : connectionHandlers.values()) {
                     List<Device> neighbors = handler.getNeighbourDevices();
-                    protocol.remainingHops --;
+                    protocol.remainingHops--;
+                    Log.d(TAG, "remainingHops: " + protocol.remainingHops + " messageID: " + protocol.messageId + " PROTOCOL TYPE: " + protocol.getByteType());
                     if (protocol.remainingHops <= 0) {
                         Log.d(TAG, "finished remaining hops, cant route anymore. messageId=" + protocol.messageId + " sender=" + protocol.sender);
                         return;
@@ -582,7 +674,8 @@ public class MeshRouter {
                                 return;
                             }
                         }
-                    }                }
+                    }
+                }
                 throw new SendError("Next hop unreachable: " + nextHop);
             } catch (SendError e) {
                 routingTable.routes.remove(protocol.destination);

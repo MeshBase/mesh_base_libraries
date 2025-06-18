@@ -9,6 +9,7 @@ import io.github.meshbase.mesh_base_core.global_interfaces.ConnectionHandlerList
 import io.github.meshbase.mesh_base_core.global_interfaces.ConnectionHandlersEnum;
 import io.github.meshbase.mesh_base_core.global_interfaces.Device;
 import io.github.meshbase.mesh_base_core.router.MeshProtocol;
+import io.github.meshbase.mesh_base_core.router.MeshRouter;
 import io.github.meshbase.mesh_base_core.router.ProtocolType;
 import io.github.meshbase.mesh_base_core.router.Router;
 import io.github.meshbase.mesh_base_core.router.SendListener;
@@ -26,7 +27,7 @@ public class MeshManager {
     private final HashMap<ConnectionHandlersEnum, ConnectionHandler> connectionHandlers = new HashMap<>();
     //TODO: store uuid in local storage so that the devices address is consistent
     private final UUID id;
-    private final Router router;
+    private final MeshRouter router;
     private final String TAG = "my_meshManager";
     private boolean isOn = false;
     private Activity activity;
@@ -99,7 +100,7 @@ public class MeshManager {
         //TODO: implement ProtocolType.Receive_Message as a response type, but for now, use SENd_MESSAGE itself
         typesExpectingResponses.add(ProtocolType.SEND_MESSAGE);
         typesExpectingResponses.add(ProtocolType.RAW_BYTES_MESSAGE);
-        router = new Router(connectionHandlers, id, typesExpectingResponses);
+        router = new MeshRouter(connectionHandlers, id, typesExpectingResponses);
 
         router.setListener(new Router.RouterListener() {
             @Override
