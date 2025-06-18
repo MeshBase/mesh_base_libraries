@@ -1,8 +1,10 @@
 import 'dart:convert';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:mesh_base_flutter/mesh_base_flutter.dart';
+import 'package:file_picker/file_picker.dart';
 
 final PREFIX = "my_example_app";
 
@@ -20,6 +22,7 @@ class _BleTestScreenState extends State<ExampleTestScreen> {
   String _message = '';
 
   late final MeshManagerListener _listener;
+  Widget container = Container();
 
   @override
   void initState() {
@@ -56,6 +59,14 @@ class _BleTestScreenState extends State<ExampleTestScreen> {
   }
 
   void _handleData(MeshProtocol protocol) {
+    if (protocol.messageType == ProtocolType.FILE_TRANSFER) {
+      Uint8List jpegData = Uint8List.sublistView(protocol.body, 12);
+      debugPrint("chunk received");
+      setState(() {
+        container = Image.memory(jpegData);
+      });
+      return;
+    }
     final text = utf8.decode(protocol.body);
     _showSnack('Recv: "$text" from ${protocol.sender}');
 
@@ -120,36 +131,60 @@ class _BleTestScreenState extends State<ExampleTestScreen> {
               return ListTile(
                 title: Text('${d.name} (${d.uuid})'),
                 trailing: ElevatedButton(
-                  onPressed: () {
-                    final protocol = MeshProtocol(
-                      messageType: ProtocolType.RAW_BYTES_MESSAGE,
-                      remainingHops: -1,
-                      messageId: -1,
-                      sender: _selfId,
-                      destination: d.uuid,
-                      body: Uint8List.fromList(utf8.encode(_message)),
-                    );
-                    mesh.send(protocol: protocol, keepMessageId: false).then((
-                      res,
-                    ) {
-                      if (res.acked) {
-                        _showSnack('Ack for "$_message"');
-                      } else if (res.error != null) {
-                        _showSnack('Send error: ${res.error}');
-                      } else if (res.response?.body != null) {
-                        _showSnack(
-                          "Response received from :${d.uuid} ${utf8.decode(res.response!.body)}",
+                  onPressed: () async {
+                    FilePickerResult? result = await FilePicker.platform
+                        .pickFiles(
+                          type: FileType.image,
+                          withData: true, // important to get bytes
                         );
-                      }
-                    });
+                    final int messageId = Random().nextInt(1 << 30);
+                    if (result != null && result.files.single.bytes != null) {
+                      Uint8List fileBytes = result.files.single.bytes!;
+                      final protocol = MeshProtocol(
+                        messageType: ProtocolType.FILE_TRANSFER,
+                        remainingHops: 10,
+                        messageId: messageId,
+                        sender: _selfId,
+                        destination: d.uuid,
+                        body: fileBytes,
+                      );
+                      mesh.send(protocol: protocol);
+                    }
                   },
-                  child: const Text('Send'),
+                  child: const Text("Send img"),
                 ),
+                // trailing: ElevatedButton(
+                //   onPressed: () {
+                //     final protocol = MeshProtocol(
+                //       messageType: ProtocolType.RAW_BYTES_MESSAGE,
+                //       remainingHops: -1,
+                //       messageId: -1,
+                //       sender: _selfId,
+                //       destination: d.uuid,
+                //       body: Uint8List.fromList(utf8.encode(_message)),
+                //     );
+                //     mesh.send(protocol: protocol, keepMessageId: false).then((
+                //       res,
+                //     ) {
+                //       if (res.acked) {
+                //         _showSnack('Ack for "$_message"');
+                //       } else if (res.error != null) {
+                //         _showSnack('Send error: ${res.error}');
+                //       } else if (res.response?.body != null) {
+                //         _showSnack(
+                //           "Response received from :${d.uuid} ${utf8.decode(res.response!.body)}",
+                //         );
+                //       }
+                //     });
+                //   },
+                //   child: const Text('Send'),
+                // ),
               );
             },
           ),
         ),
 
+        container,
         TextButton(
           onPressed: () async {
             final protocol = MeshProtocol(

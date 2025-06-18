@@ -1,13 +1,20 @@
 package io.github.meshbase.mesh_base_core.router;
 
+import android.graphics.Mesh;
 import android.util.Log;
 
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Random;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -25,10 +32,13 @@ import io.github.meshbase.mesh_base_core.global_interfaces.InternalRouterError;
 import io.github.meshbase.mesh_base_core.global_interfaces.SendError;
 
 
+/** @noinspection unchecked*/
 public class MeshRouter {
 
     private static final int ROUTE_DISCOVERY_TIMEOUT = 5000; // ms
     private final Map<ConnectionHandlersEnum, ConnectionHandler> connectionHandlers;
+    private final FileSender fileSender;
+    private final FileReassembler fileReassembler;
     private final MessageForwarding messageForwarding;
     private final RoutingTable routingTable;
     private final NeighborDiscovery neighborDiscovery;
@@ -41,7 +51,7 @@ public class MeshRouter {
 
     private static final String TAG = "my_mesh_Router";
 
-    Router.RouterListener routerListener = new Router.RouterListener() {
+    public Router.RouterListener routerListener = new Router.RouterListener() {
         @Override
         public void onData(MeshProtocol<?> protocol, Device neighbor) {
             Log.d(TAG, "Received data from " + neighbor.name);
@@ -66,7 +76,8 @@ public class MeshRouter {
         this.routingTable = new RoutingTable();
         this.routeDiscovery = new RouteDiscovery(this.routingTable);
         this.messageForwarding = new MessageForwarding(this, this.routingTable);
-
+        this.fileSender = new FileSender();
+        this.fileReassembler = new FileReassembler();
 
         for (ConnectionHandler handler : connectionHandlers.values()) {
             handler.subscribe(
@@ -100,15 +111,16 @@ public class MeshRouter {
     }
 
     public void sendData(MeshProtocol<?> protocol, SendListener listener, boolean keepMessageId) {
+        Log.d(TAG, "Sending Data with protocol" + protocol.getByteType());
         if (!keepMessageId) {
             protocol.messageId = ThreadLocalRandom.current().nextInt();
         }
 
         if (protocol.destination.equals(BROADCAST_UUID)) {
-            try{
+            try {
                 floodData(protocol);
             } catch (SendError e) {
-               notifyError(protocol.messageId, e);
+                notifyError(protocol.messageId, e);
             }
         }
 
@@ -159,6 +171,10 @@ public class MeshRouter {
                 case SEND_MESSAGE:
                     Log.d(TAG, "Trying to send/receive message");
                     handleExpectingResponseData(protocol);
+                    break;
+                case FILE_TRANSFER:
+                    Log.d(TAG, "Handling file transfer");
+                    processFileShare(protocol, sender);
                     break;
 
                 default:
@@ -214,24 +230,7 @@ public class MeshRouter {
         }
     }
 
-    public void broadCast(MeshProtocol<?> protocol) throws SendError {
-        boolean hasTriedSendingData = false;
-        for (var handler : connectionHandlers.values()) {
-            if (handler.isOn()) {
-                try {
-                    for (var neighbor : handler.getNeighbourDevices()) {
-                        hasTriedSendingData = true;
-                        handler.send(protocol.encode(), neighbor);
-                    }
-                } catch (SendError e) {
-                    notifyError(protocol.messageId, e);
-                }
 
-            }
-        }
-
-        if (!hasTriedSendingData) throw new SendError("Data not flooded. No neighbors founds");
-    }
     public void floodData(MeshProtocol<?> protocol) throws SendError {
 
         boolean hasTriedSendingData = false;
@@ -240,7 +239,12 @@ public class MeshRouter {
                 try {
                     for (var neighbor : handler.getNeighbourDevices()) {
                         hasTriedSendingData = true;
-                        handler.send(protocol.encode(), neighbor);
+                        if (protocol.getByteType() == ProtocolType.FILE_TRANSFER) {
+                            Log.d(TAG, "File transfer has reached expected line sending data");
+                           fileSender.sendFile((MeshProtocol<FileTransferBody>) protocol, handler);
+                        } else {
+                            handler.send(protocol.encode(), neighbor);
+                        }
                     }
                 } catch (SendError e) {
                     notifyError(protocol.messageId, e);
@@ -312,6 +316,24 @@ public class MeshRouter {
         } else {
             messageForwarding.forwardMessage(protocol);
         }
+    }
+
+
+    private void processFileShare(MeshProtocol<?> protocol, Device sender) {
+        if (protocol.getByteType() != ProtocolType.FILE_TRANSFER) {
+            Log.e(TAG, "Illegal method trying to invoke file sharing without sharing any file");
+            return;
+        }
+
+        if(protocol.destination.equals(myUUID)) {
+            Log.d(TAG, "Receiving chunks");
+            MeshProtocol<FileTransferBody> data = (MeshProtocol<FileTransferBody>) protocol;
+            fileReassembler.receiveChunk(data);
+        } else {
+            messageForwarding.forwardMessage(protocol);
+        }
+
+
     }
 
 
@@ -589,6 +611,7 @@ public class MeshRouter {
             messageForwarding.forwardMessage(protocol);
         }
 
+
     }
 
     private static class PendingRouteRequest {
@@ -670,7 +693,11 @@ public class MeshRouter {
                     for (Device device : neighbors) {
                         if (device.uuid.equals(nextHop)) {
                             if (handler.isOn()) {
-                                handler.send(protocol.encode());
+                                if (protocol.getByteType() == ProtocolType.FILE_TRANSFER) {
+                                    router.fileSender.sendFile((MeshProtocol<FileTransferBody>) protocol, handler);
+                                } else{
+                                    handler.send(protocol.encode());
+                                }
                                 return;
                             }
                         }
@@ -691,5 +718,109 @@ public class MeshRouter {
             // Continue forwarding
             forwardMessage(protocol);
         }
+    }
+
+
+    public class FileSender {
+        private static final int MAGIC_NUMBER = 0xF1BEEF01;
+        private static final int MAX_CHUNK_SIZE = 400;
+
+        void sendFile(
+                MeshProtocol<FileTransferBody> protocol,
+                ConnectionHandler handler
+        ) {
+            byte[] fileData = protocol.body.data;
+
+            int transferId = new Random().nextInt();
+            int totalChunks = (int) Math.ceil((double) fileData.length / MAX_CHUNK_SIZE);
+            int remainingHops = 10;
+
+            for (int seqNum = 0; seqNum < totalChunks; seqNum++) {
+                int start = seqNum * MAX_CHUNK_SIZE;
+                int end = Math.min(start + MAX_CHUNK_SIZE, fileData.length);
+                byte[] chunkData = Arrays.copyOfRange(fileData, start, end);
+
+                FileTransferBody body = new FileTransferBody(
+                        MAGIC_NUMBER,
+                        transferId,
+                        (short) seqNum,
+                        (short) totalChunks,
+                        chunkData
+
+                );
+
+                MeshProtocol<FileTransferBody> packet = new ConcreteMeshProtocol<>(
+                        7,
+                        remainingHops,
+                        protocol.messageId + seqNum,
+                        protocol.sender,
+                        protocol.destination,
+                        body
+                );
+                Log.d(TAG, "Sending file chunk" + start + ":" + end);
+
+                try {
+                    handler.send(packet.encode());
+                } catch (SendError e) {
+                    notifyError(protocol.messageId, e);
+                }
+            }
+
+        }
+    }
+
+    public class FileReassembler {
+        private static final int MAGIC_NUMBER = 0xF1BEEF01;
+
+        private final Map<Integer, TreeMap<Short, byte[]>> chunkBuffer = new HashMap<>();
+        private final Map<Integer, Short> chunkCounts = new HashMap<>();
+
+        public void receiveChunk(MeshProtocol<FileTransferBody> protocol) {
+            FileTransferBody body = (FileTransferBody) protocol.body;
+            // Sanity check
+            if (body.magic != MAGIC_NUMBER) {
+                Log.e("Reassembler", "Invalid magic number, skipping");
+                return;
+            }
+
+            int transferId = body.transferId;
+            short seqNum = body.seqNum;
+            short totalChunks = body.totalChunks;
+
+            // Init chunk map if needed
+            chunkBuffer.putIfAbsent(transferId, new TreeMap<>());
+            chunkCounts.putIfAbsent(transferId, totalChunks);
+
+            TreeMap<Short, byte[]> chunks = chunkBuffer.get(transferId);
+            if (chunks != null) {
+                chunks.put(seqNum, body.data);
+            }
+
+            Log.d("Reassembler", "Received chunk " + seqNum + " / " + totalChunks);
+
+            if (chunks.size() == totalChunks) {
+                Log.d("Reassembler", "All chunks received. Reassembling...");
+                protocol.body.data = assembleFile(chunks);
+                chunkBuffer.remove(transferId);
+                chunkCounts.remove(transferId);
+                routerListener.onData(protocol, null);
+            }
+
+        }
+
+        private byte[] assembleFile(TreeMap<Short, byte[]> chunks) {
+            try {
+                ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+                for (byte[] chunk : chunks.values()) {
+                    outputStream.write(chunk);
+                }
+                return outputStream.toByteArray();
+            } catch (IOException e) {
+                Log.e("Reassembler", "Failed to assemble file: " + e.getMessage());
+                return null;
+            }
+        }
+
+
     }
 }

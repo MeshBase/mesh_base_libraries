@@ -46,6 +46,8 @@ public abstract class MeshProtocol<T extends MeshSerializer<T>> implements MeshS
                 return decode(data, RREPBody::decode);
             case RAW_BYTES_MESSAGE:
                 return decode(data, RawBytesBody::decode);
+            case FILE_TRANSFER:
+                return decode(data, FileTransferBody::decode);
             default:
                 throw new IllegalArgumentException("Unsupported protocol type: " + type);
         }
@@ -113,6 +115,8 @@ public abstract class MeshProtocol<T extends MeshSerializer<T>> implements MeshS
                 return ProtocolType.RREP;
             case 6:
                 return ProtocolType.PING;
+            case 7:
+                return ProtocolType.FILE_TRANSFER;
             default:
                 return ProtocolType.UNKNOWN_MESSAGE_TYPE;
         }
