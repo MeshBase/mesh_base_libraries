@@ -155,6 +155,7 @@ enum ProtocolType {
   ACK,
   UNKNOWN_MESSAGE_TYPE,
   RAW_BYTES_MESSAGE,
+  FILE_TRANSFER,
 
   // keep in sync with java's enums
 }

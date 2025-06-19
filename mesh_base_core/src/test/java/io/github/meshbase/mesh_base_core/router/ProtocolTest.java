@@ -42,17 +42,17 @@ public class ProtocolTest {
     }
 
     //TODO: update test to make it pass, was commented to make publishing to maven local work
-//    @Test
-//    public void testIfProtocolProperlySerializesAndDeserializesData() {
-//        Function<byte[], SendMessageBody> bodyDecoder = SendMessageBody::decode;
-//        MeshProtocol<SendMessageBody> actualDecode = MeshProtocol.decode(getDummyByteArray(), bodyDecoder);
-//        MeshProtocol<SendMessageBody> expectedDecode = getDummySendMessageBody();
-//
-//        Assertions.assertEquals(expectedDecode, actualDecode);
-//
-//        byte[] actualEncode = getDummySendMessageBody().encode();
-//        byte[] expectedEncode = getDummyByteArray();
-//
-//        Assertions.assertArrayEquals(expectedEncode, actualEncode);
-//    }
+    @Test
+    public void testIfProtocolProperlySerializesAndDeserializesData() {
+        Function<byte[], SendMessageBody> bodyDecoder = SendMessageBody::decode;
+        MeshProtocol<SendMessageBody> actualDecode = MeshProtocol.decode(getDummyByteArray(), bodyDecoder);
+        MeshProtocol<SendMessageBody> expectedDecode = getDummySendMessageBody();
+
+        Assertions.assertEquals(expectedDecode, actualDecode);
+
+        byte[] actualEncode = getDummySendMessageBody().encode();
+        byte[] expectedEncode = getDummyByteArray();
+
+        Assertions.assertArrayEquals(expectedEncode, actualEncode);
+    }
 }
