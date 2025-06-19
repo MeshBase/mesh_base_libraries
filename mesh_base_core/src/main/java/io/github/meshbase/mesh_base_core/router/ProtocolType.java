@@ -9,5 +9,6 @@ public enum ProtocolType {
     RREQ,
     RREP,
     PING,
+    KEY_SHARE,
     // add more type here
 }

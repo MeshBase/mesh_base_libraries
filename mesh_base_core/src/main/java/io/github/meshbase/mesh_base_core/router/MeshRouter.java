@@ -1,9 +1,16 @@
 package io.github.meshbase.mesh_base_core.router;
 
+import static io.github.meshbase.mesh_base_core.router.ProtocolType.RAW_BYTES_MESSAGE;
+import static io.github.meshbase.mesh_base_core.router.ProtocolType.SEND_MESSAGE;
+
+import android.os.Build;
 import android.util.Log;
 
 
-import java.util.ArrayList;
+import androidx.annotation.RequiresApi;
+
+import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -17,12 +24,14 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import io.github.meshbase.mesh_base_core.encryption.EncryptionHandler;
 import io.github.meshbase.mesh_base_core.global_interfaces.ConnectionHandler;
 import io.github.meshbase.mesh_base_core.global_interfaces.ConnectionHandlerListener;
 import io.github.meshbase.mesh_base_core.global_interfaces.ConnectionHandlersEnum;
 import io.github.meshbase.mesh_base_core.global_interfaces.Device;
 import io.github.meshbase.mesh_base_core.global_interfaces.InternalRouterError;
 import io.github.meshbase.mesh_base_core.global_interfaces.SendError;
+import io.github.meshbase.mesh_base_core.mesh_manager.Store;
 
 
 public class MeshRouter {
@@ -32,6 +41,8 @@ public class MeshRouter {
     private final MessageForwarding messageForwarding;
     private final RoutingTable routingTable;
     private final NeighborDiscovery neighborDiscovery;
+    private final PublicKeySharingScheduler publicKeySharingScheduler;
+    private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
     private final RouteDiscovery routeDiscovery;
     private final Deduplication deduplication;
 
@@ -40,6 +51,11 @@ public class MeshRouter {
     private final HashSet<ProtocolType> typesExpectingResponses;
 
     private static final String TAG = "my_mesh_Router";
+
+    private final Store store;
+    private final byte[] myPublicKey;
+    private final byte[] myPrivateKey;
+    private final ProtocolType[] protocolsToEncrypt = {RAW_BYTES_MESSAGE, SEND_MESSAGE};
 
     Router.RouterListener routerListener = new Router.RouterListener() {
         @Override
@@ -56,7 +72,7 @@ public class MeshRouter {
     // Constants
     private static final UUID BROADCAST_UUID = UUID.fromString("00000000-0000-0000-0000-000000000001");
 
-    public MeshRouter(Map<ConnectionHandlersEnum, ConnectionHandler> connectionHandlers, UUID myUUID, HashSet<ProtocolType> typesExpectingResponses) {
+    public MeshRouter(Map<ConnectionHandlersEnum, ConnectionHandler> connectionHandlers, UUID myUUID, HashSet<ProtocolType> typesExpectingResponses, Store store) {
         this.connectionHandlers = connectionHandlers;
         this.myUUID = myUUID;
         this.typesExpectingResponses = typesExpectingResponses;
@@ -66,11 +82,15 @@ public class MeshRouter {
         this.routingTable = new RoutingTable();
         this.routeDiscovery = new RouteDiscovery(this.routingTable);
         this.messageForwarding = new MessageForwarding(this, this.routingTable);
-
+        this.myPublicKey = store.getPublicKey();
+        this.myPrivateKey = store.getPrivateKey();
+        this.publicKeySharingScheduler = new PublicKeySharingScheduler(this.myPublicKey);
+        this.store = store;
 
         for (ConnectionHandler handler : connectionHandlers.values()) {
             handler.subscribe(
                     new ConnectionHandlerListener() {
+                        @RequiresApi(api = Build.VERSION_CODES.O)
                         @Override
                         public void onDataReceived(Device device, byte[] data) {
                             processIncomingData(device, data);
@@ -95,20 +115,22 @@ public class MeshRouter {
 
     }
 
+    @RequiresApi(api = Build.VERSION_CODES.O)
     public void sendData(MeshProtocol<?> protocol, SendListener listener) {
         sendData(protocol, listener, false);
     }
 
+    @RequiresApi(api = Build.VERSION_CODES.O)
     public void sendData(MeshProtocol<?> protocol, SendListener listener, boolean keepMessageId) {
         if (!keepMessageId) {
             protocol.messageId = ThreadLocalRandom.current().nextInt();
         }
 
         if (protocol.destination.equals(BROADCAST_UUID)) {
-            try{
+            try {
                 floodData(protocol);
             } catch (SendError e) {
-               notifyError(protocol.messageId, e);
+                notifyError(protocol.messageId, e);
             }
         }
 
@@ -116,13 +138,74 @@ public class MeshRouter {
         messageListeners.put(protocol.messageId, listener);
         protocol.remainingHops = 8;
 
-        messageForwarding.forwardMessage(protocol);
+        // encrypt encode encryptable protocols
+        if (Arrays.asList(protocolsToEncrypt).contains(protocol.getByteType())) {
+            byte[] publicKey = store.getNeighborPublicKey(protocol.destination);
+
+            if (publicKey == null) {
+                scheduleKeyRetry(protocol, listener, 4);
+                return;
+            }
+
+            byte[] bodyBytes = protocol.body.encode();
+            String plainText = new String(bodyBytes, StandardCharsets.UTF_8);
+            String encrypted = EncryptionHandler.encrypt(plainText, publicKey);
+            if (encrypted == null) {
+                notifyError(protocol.messageId, new SendError("Encryption failed"));
+                return;
+            }
+            byte[] encryptedBytes = encrypted.getBytes(StandardCharsets.UTF_8);
+
+
+            MeshProtocol<?> encryptedProtocol;
+            if (protocol.getByteType() == ProtocolType.SEND_MESSAGE) {
+                encryptedProtocol = new ConcreteMeshProtocol<SendMessageBody>(
+                        protocol.messageType,
+                        protocol.remainingHops,
+                        protocol.messageId,
+                        protocol.sender,
+                        protocol.destination,
+                        new SendMessageBody(4, false, new String(encryptedBytes, StandardCharsets.UTF_8))
+                );
+            } else { // RAW_BYTES_MESSAGE
+                encryptedProtocol = new ConcreteMeshProtocol<RawBytesBody>(
+                        protocol.messageType,
+                        protocol.remainingHops,
+                        protocol.messageId,
+                        protocol.sender,
+                        protocol.destination,
+                        new RawBytesBody(encryptedBytes)
+                );
+            }
+            messageForwarding.forwardMessage(encryptedProtocol);
+        } else {
+            messageForwarding.forwardMessage(protocol);
+        }
     }
 
+    @RequiresApi(api = Build.VERSION_CODES.O)
+    private void scheduleKeyRetry(MeshProtocol<?> protocol, SendListener listener, int retriesLeft) {
+        if (retriesLeft <= 0) {
+            listener.onError(new SendError("Public key not found after 4 retries for " + protocol.destination));
+            messageListeners.remove(protocol.messageId);
+            return;
+        }
+        scheduler.schedule(() -> {
+            byte[] publicKey = store.getNeighborPublicKey(protocol.destination);
+            if (publicKey != null) {
+                sendData(protocol, listener, true);
+            } else {
+                scheduleKeyRetry(protocol, listener, retriesLeft - 1);
+            }
+        }, 5, TimeUnit.SECONDS);
+    }
+
+
+    @RequiresApi(api = Build.VERSION_CODES.O)
     private void processIncomingData(Device sender, byte[] data) {
         try {
 
-            Log.d(TAG, "Recieved data to decode stuff");
+            Log.d(TAG, "Received data to decode stuff");
             MeshProtocol<?> protocol = MeshProtocol.decode(data);
 
             // Deduplication check
@@ -161,6 +244,10 @@ public class MeshRouter {
                     handleExpectingResponseData(protocol);
                     break;
 
+                case KEY_SHARE:
+                    handleKeyshareData(protocol);
+                    break;
+
                 default:
                     Log.d(TAG, "DEFAULT: Trying to send/receive message");
                     if (isBroadcast) {
@@ -173,14 +260,60 @@ public class MeshRouter {
         }
     }
 
+    private void handleKeyshareData(MeshProtocol<?> protocol) {
+        KeyShareBody keyBody = (KeyShareBody) protocol.body;
+        byte[] publicKey = keyBody.getPublicKey();
+        UUID fingerprint = EncryptionHandler.fingerprintPublicKey(publicKey);
+        if (fingerprint != null && fingerprint.equals(protocol.sender)) {
+            store.storeNeighborPublicKey(protocol.sender, publicKey);
+            protocol.remainingHops--;
+            if (protocol.remainingHops > 0) {
+                try {
+                    floodData(protocol);
+                } catch (SendError e) {
+                    Log.w(TAG, "Failed to re-broadcast KEY_SHARE: " + e.getMessage());
+                }
+            }
+        } else {
+            Log.w(TAG, "Invalid public key fingerprint for " + protocol.sender);
+        }
+    }
+
+    @RequiresApi(api = Build.VERSION_CODES.O)
     private void handleExpectingResponseData(MeshProtocol<?> protocol) {
         if (protocol.destination.equals(myUUID)) {
-            routerListener.onData(protocol, null);
-            if (typesExpectingResponses.contains(protocol.getByteType())) {
-                return;
+            if (Arrays.asList(protocolsToEncrypt).contains(protocol.getByteType())) {
+                byte[] bodyBytes = protocol.body.encode();
+                String encryptedText = new String(bodyBytes, StandardCharsets.UTF_8);
+                String decrypted = EncryptionHandler.decrypt(encryptedText, myPrivateKey);
+                if (decrypted == null) {
+                    Log.e(TAG, "Decryption failed for messageId: " + protocol.messageId);
+                    routerListener.onError(new SendError("Decryption failed"));
+                    return;
+                }
+                byte[] decryptedBytes = decrypted.getBytes(StandardCharsets.UTF_8);
+                MeshProtocol<?> decryptedProtocol;
+                if (protocol.getByteType() == ProtocolType.SEND_MESSAGE) {
+                    SendMessageBody body = SendMessageBody.decode(decryptedBytes);
+                    decryptedProtocol = new ConcreteMeshProtocol<>(
+                            protocol.messageType, protocol.remainingHops, protocol.messageId,
+                            protocol.sender, protocol.destination, body
+                    );
+                } else { // RAW_BYTES_MESSAGE
+                    RawBytesBody body = RawBytesBody.decode(decryptedBytes);
+                    decryptedProtocol = new ConcreteMeshProtocol<>(
+                            protocol.messageType, protocol.remainingHops, protocol.messageId,
+                            protocol.sender, protocol.destination, body
+                    );
+                }
+                routerListener.onData(decryptedProtocol, null);
+            } else {
+                routerListener.onData(protocol, null);
             }
 
-            sendAck(protocol.sender, protocol.messageId);
+            if (!typesExpectingResponses.contains(protocol.getByteType())) {
+                sendAck(protocol.sender, protocol.messageId);
+            }
             return;
         }
         messageForwarding.forwardMessage(protocol);
@@ -232,6 +365,7 @@ public class MeshRouter {
 
         if (!hasTriedSendingData) throw new SendError("Data not flooded. No neighbors founds");
     }
+
     public void floodData(MeshProtocol<?> protocol) throws SendError {
 
         boolean hasTriedSendingData = false;
@@ -690,6 +824,47 @@ public class MeshRouter {
 
             // Continue forwarding
             forwardMessage(protocol);
+        }
+    }
+
+    private class PublicKeySharingScheduler {
+        private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+        AtomicInteger idGenerator = new AtomicInteger();
+
+        PublicKeySharingScheduler(byte[] myPublicKey) {
+            startPeriodicPublicKeySharing();
+        }
+
+        private void startPeriodicPublicKeySharing() {
+            scheduler.scheduleWithFixedDelay(() -> {
+                for (ConnectionHandler handler : connectionHandlers.values()) {
+                    if (!handler.isOn()) continue;
+
+                    for (Device neighbor : handler.getNeighbourDevices()) {
+                        MeshProtocol<KeyShareBody> publicKeyShare = createKeyShareMessage();
+                        try {
+                            handler.send(publicKeyShare.encode());
+                        } catch (SendError e) {
+                            Log.e(TAG, "Failed to Broadcast Key with error" + e.toString());
+                            routingTable.removeRoute(neighbor.uuid);
+                        }
+                    }
+                }
+            }, 0, 10, TimeUnit.SECONDS);
+        }
+
+        MeshProtocol<KeyShareBody> createKeyShareMessage() {
+            KeyShareBody publicKeySharingMessage = new KeyShareBody(myPublicKey);
+            int nextId = idGenerator.incrementAndGet();
+
+            return new ConcreteMeshProtocol<>(
+                    7,
+                    50,
+                    nextId,
+                    myUUID,
+                    BROADCAST_UUID,
+                    publicKeySharingMessage
+            );
         }
     }
 }

@@ -46,6 +46,8 @@ public abstract class MeshProtocol<T extends MeshSerializer<T>> implements MeshS
                 return decode(data, RREPBody::decode);
             case RAW_BYTES_MESSAGE:
                 return decode(data, RawBytesBody::decode);
+            case KEY_SHARE:
+                return decode(data, KeyShareBody::decode);
             default:
                 throw new IllegalArgumentException("Unsupported protocol type: " + type);
         }
@@ -90,7 +92,6 @@ public abstract class MeshProtocol<T extends MeshSerializer<T>> implements MeshS
 
     }
 
-
     public static ProtocolType getByteType(byte[] data) {
         if (data.length < 4) {
             throw new IllegalArgumentException("Buffer data cannot be determined due to small length size.[CANNOT_DETERMINE_TYPE]");
@@ -113,6 +114,8 @@ public abstract class MeshProtocol<T extends MeshSerializer<T>> implements MeshS
                 return ProtocolType.RREP;
             case 6:
                 return ProtocolType.PING;
+            case 7:
+                return ProtocolType.KEY_SHARE;
             default:
                 return ProtocolType.UNKNOWN_MESSAGE_TYPE;
         }

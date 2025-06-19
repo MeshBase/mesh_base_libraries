@@ -15,6 +15,7 @@ import io.github.meshbase.mesh_base_core.global_interfaces.ConnectionHandlerList
 import io.github.meshbase.mesh_base_core.global_interfaces.ConnectionHandlersEnum;
 import io.github.meshbase.mesh_base_core.global_interfaces.Device;
 import io.github.meshbase.mesh_base_core.global_interfaces.SendError;
+import io.github.meshbase.mesh_base_core.mesh_manager.Store;
 import io.github.meshbase.mesh_base_core.router.AckMessageBody;
 import io.github.meshbase.mesh_base_core.router.ConcreteMeshProtocol;
 import io.github.meshbase.mesh_base_core.router.MeshProtocol;
@@ -48,6 +49,7 @@ public class RouterUnitTest {
     @Test
     public void testSendCall_isOnAndNeighbors_callsSend() throws SendError {
         ConnectionHandler handler = mock(ConnectionHandler.class);
+        Store store = mock(Store.class);
         ArrayList<Device> devices = createDevices(5);
 
         when(handler.isOn()).thenReturn(true);
@@ -57,7 +59,7 @@ public class RouterUnitTest {
         HashMap<ConnectionHandlersEnum, ConnectionHandler> handlers = new HashMap<>();
         handlers.put(ConnectionHandlersEnum.BLE, handler);
 //        Router router = new Router(handlers, id, new HashSet<>());
-        MeshRouter router = new MeshRouter(handlers, id, new HashSet<>());
+        MeshRouter router = new MeshRouter(handlers, id, new HashSet<>(), store);
         MeshProtocol<SendMessageBody> protocol = new ConcreteMeshProtocol<>(1, 4, -1, id, devices.get(0).uuid, new SendMessageBody(4, false, "hello world"));
 
         //Perfect path
@@ -83,6 +85,7 @@ public class RouterUnitTest {
     @Test
     public void testAck_receivesData_respondsWithAck() throws SendError {
         ConnectionHandler handler = mock(ConnectionHandler.class);
+        Store store = mock(Store.class);
         UUID senderId = UUID.randomUUID();
         Device sender = new Device(senderId, "sender") {
         };
@@ -97,7 +100,7 @@ public class RouterUnitTest {
 
         UUID id = UUID.randomUUID();
 //        Router router = new Router(handlers, id, new HashSet<>());
-        MeshRouter router = new MeshRouter(handlers, id, new HashSet<>());
+        MeshRouter router = new MeshRouter(handlers, id, new HashSet<>(), store);
         Router.RouterListener routerListener = mock(Router.RouterListener.class);
         router.setListener(routerListener);
 
@@ -124,6 +127,8 @@ public class RouterUnitTest {
     @Test
     public void testAckAndResponse_receivesData_repliesWithResponseThenAck() throws SendError {
         ConnectionHandler handler = mock(ConnectionHandler.class);
+        Store store = mock(Store.class);
+
         UUID senderId = UUID.randomUUID();
         Device sender = new Device(senderId, "sender") {
         };
@@ -140,7 +145,7 @@ public class RouterUnitTest {
         HashSet<ProtocolType> expectResponseTypes = new HashSet<>();
         expectResponseTypes.add(ProtocolType.SEND_MESSAGE); //send message expects a response now
 //        Router router = new Router(handlers, id, expectResponseTypes);
-        MeshRouter router = new MeshRouter(handlers, id, expectResponseTypes);
+        MeshRouter router = new MeshRouter(handlers, id, expectResponseTypes, store);
         Router.RouterListener routerListener = mock(Router.RouterListener.class);
         router.setListener(routerListener);
 

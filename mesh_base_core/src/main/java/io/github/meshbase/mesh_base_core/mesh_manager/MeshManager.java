@@ -3,6 +3,7 @@ package io.github.meshbase.mesh_base_core.mesh_manager;
 import android.app.Activity;
 import android.util.Log;
 
+import io.github.meshbase.mesh_base_core.encryption.EncryptionHandler;
 import io.github.meshbase.mesh_base_core.global_interfaces.ConnectionHandler;
 import io.github.meshbase.mesh_base_core.global_interfaces.ConnectionHandlerFactory;
 import io.github.meshbase.mesh_base_core.global_interfaces.ConnectionHandlerListener;
@@ -32,19 +33,19 @@ public class MeshManager {
     private boolean isOn = false;
     private Activity activity;
 
+    private final EncryptionHandler encryptionHandler;
+    private final Store store;
+
     public MeshManager(Activity context) {
         this.activity = context;
         Store store = Store.getInstance(context);
-        if (store.getId() == null) {
-            UUID newId = UUID.randomUUID();
-            store.storeId(newId);
-            Log.d(TAG, "MeshManager: Generated new ID: " + newId);
-        } else {
-            Log.d(TAG, "MeshManager: Retrieved existing ID: " + store.getId());
-        }
-        id = store.getId();
 
+        this.store = Store.getInstance(context);
+        this.encryptionHandler = new EncryptionHandler();
+        initializeKeys();
+        id = store.getId();
         ConnectionHandlerFactory factory = new ConnectionHandlerFactory();
+
         Log.d(TAG, "MeshManager: Bootstrapping connection handlers...");
 
         // TODO: Check for user connection handler preference
@@ -52,69 +53,32 @@ public class MeshManager {
             ConnectionHandler connectionHandler = factory.createConnectionHandler(_enum, context, id);
             Log.d(TAG, "MeshManager: Created connection handler for " + _enum);
             connectionHandlers.put(_enum, connectionHandler);
-            connectionHandler.subscribe(
-                    new ConnectionHandlerListener() {
-                        @Override
-                        public void onNeighborConnected(Device device) {
-                            Log.d(TAG, "MeshManager: Neighbor connected: " + device);
-                            for (MeshManagerListener listener : listeners) {
-                                activity.runOnUiThread(()-> listener.onNeighborConnected(device) );
-                            }
-                        }
-
-                        @Override
-                        public void onNeighborDisconnected(Device device) {
-                            Log.d(TAG, "MeshManager: Neighbor disconnected: " + device);
-                            for (MeshManagerListener listener : listeners) {
-                                activity.runOnUiThread(()-> listener.onNeighborDisconnected(device) );
-                            }
-                        }
-
-                        @Override
-                        public void onDisconnected() {
-                            Log.d(TAG, "MeshManager: Disconnected");
-                            Status status = getStatus();
-                            for (MeshManagerListener listener : listeners) {
-                                activity.runOnUiThread(()-> listener.onStatusChange(status) );
-                            }
-                        }
-
-                        @Override
-                        public void onConnected() {
-                            Log.d(TAG, "MeshManager: Connected");
-                            Status status = getStatus();
-                            for (MeshManagerListener listener : listeners) {
-                                activity.runOnUiThread(()->listener.onStatusChange(status));
-                            }
-                        }
-                    }
-            );
+            connectionHandler.subscribe(getDefaultConnectionHanderListener());
             Log.d(TAG, "MeshManager: Subscribed to connection handler for " + _enum);
         }
 
         Log.d(TAG, "MeshManager: Completed Bootstrapping connection handlers!");
-
         Log.d(TAG, "MeshManager: Setting up Router...");
 
         HashSet<ProtocolType> typesExpectingResponses = new HashSet<>();
         //TODO: implement ProtocolType.Receive_Message as a response type, but for now, use SENd_MESSAGE itself
         typesExpectingResponses.add(ProtocolType.SEND_MESSAGE);
         typesExpectingResponses.add(ProtocolType.RAW_BYTES_MESSAGE);
-        router = new MeshRouter(connectionHandlers, id, typesExpectingResponses);
+        router = new MeshRouter(connectionHandlers, id, typesExpectingResponses, store);
 
         router.setListener(new Router.RouterListener() {
             @Override
             public void onData(MeshProtocol<?> protocol, Device neighbor) {
                 Log.d(TAG, "MeshManager: Data received from router, neighbor: " + neighbor);
                 for (MeshManagerListener listener : listeners) {
-                    activity.runOnUiThread(()-> listener.onDataReceivedForSelf(protocol) );
+                    activity.runOnUiThread(() -> listener.onDataReceivedForSelf(protocol));
                 }
             }
 
             @Override
             public void onError(Exception exception) {
                 for (MeshManagerListener listener : listeners) {
-                    activity.runOnUiThread(()-> listener.onError(exception) );
+                    activity.runOnUiThread(() -> listener.onError(exception));
                 }
             }
         });
@@ -147,12 +111,12 @@ public class MeshManager {
         isOn = true;
         Status status = getStatus();
         for (MeshManagerListener listener : listeners) {
-            activity.runOnUiThread(()-> listener.onStatusChange(status) );
+            activity.runOnUiThread(() -> listener.onStatusChange(status));
         }
-        Log.d(TAG, "MeshManager: Mesh turned on, notified #"+listeners.size()+" listeners");
+        Log.d(TAG, "MeshManager: Mesh turned on, notified #" + listeners.size() + " listeners");
     }
 
-    public void onPermissionResult(int requestCode){
+    public void onPermissionResult(int requestCode) {
         for (ConnectionHandler helper : connectionHandlers.values()) {
             helper.onPermissionResult(requestCode);
         }
@@ -166,7 +130,7 @@ public class MeshManager {
         isOn = false;
         Status status = getStatus();
         for (MeshManagerListener listener : listeners) {
-            activity.runOnUiThread(()-> listener.onStatusChange(status) );
+            activity.runOnUiThread(() -> listener.onStatusChange(status));
         }
         Log.d(TAG, "MeshManager: Mesh turned off, notified listeners");
     }
@@ -202,4 +166,54 @@ public class MeshManager {
         Log.d(TAG, "MeshManager: All listeners cleared");
     }
 
+    private void initializeKeys() {
+        if (store.getId() == null || store.getPublicKey() == null || store.getPrivateKey() == null) {
+            encryptionHandler.generateKeyPair();
+            UUID uuid = UUID.randomUUID();
+            store.storeId(uuid);
+            store.storePublicKey(encryptionHandler.getPublicKey().getEncoded());
+            store.storePrivateKey(encryptionHandler.getPrivateKey().getEncoded());
+            Log.d(TAG, "Generated key pairs stored in persistence");
+        } else {
+            Log.d(TAG, "Keys already in store, skipped generation");
+        }
+    }
+
+    private ConnectionHandlerListener getDefaultConnectionHanderListener() {
+        return new ConnectionHandlerListener() {
+            @Override
+            public void onNeighborConnected(Device device) {
+                Log.d(TAG, "MeshManager: Neighbor connected: " + device);
+                for (MeshManagerListener listener : listeners) {
+                    activity.runOnUiThread(() -> listener.onNeighborConnected(device));
+                }
+            }
+
+            @Override
+            public void onNeighborDisconnected(Device device) {
+                Log.d(TAG, "MeshManager: Neighbor disconnected: " + device);
+                for (MeshManagerListener listener : listeners) {
+                    activity.runOnUiThread(() -> listener.onNeighborDisconnected(device));
+                }
+            }
+
+            @Override
+            public void onDisconnected() {
+                Log.d(TAG, "MeshManager: Disconnected");
+                Status status = getStatus();
+                for (MeshManagerListener listener : listeners) {
+                    activity.runOnUiThread(() -> listener.onStatusChange(status));
+                }
+            }
+
+            @Override
+            public void onConnected() {
+                Log.d(TAG, "MeshManager: Connected");
+                Status status = getStatus();
+                for (MeshManagerListener listener : listeners) {
+                    activity.runOnUiThread(() -> listener.onStatusChange(status));
+                }
+            }
+        };
+    }
 }

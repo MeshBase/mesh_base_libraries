@@ -45,7 +45,7 @@ public class EncryptionHandler {
         return (this.keyPair != null) ? this.keyPair.getPrivate() : null;
     }
 
-    public UUID fingerprintPublicKey(PublicKey publicKey) {
+    public static UUID fingerprintPublicKey(PublicKey publicKey) {
         try {
             MessageDigest md = MessageDigest.getInstance("MD5");
             byte[] digest = md.digest(publicKey.getEncoded());
@@ -56,7 +56,7 @@ public class EncryptionHandler {
         }
     }
 
-    public UUID fingerprintPublicKey(byte[] publicKeyBytes) {
+    public static UUID fingerprintPublicKey(byte[] publicKeyBytes) {
         try {
             PublicKey publicKey = bytesToPublicKey(publicKeyBytes);
             MessageDigest md = MessageDigest.getInstance("MD5");
@@ -64,11 +64,11 @@ public class EncryptionHandler {
             return convertBytesToUUID(digest);
         } catch (NoSuchAlgorithmException e) {
             Log.e(TAG, "MD5 algorithm not found", e);
-            return null; // Return null on error
+            return null;
         }
     }
 
-    public boolean validateFingerprint(PublicKey publicKey, UUID expectedFingerprint) {
+    public static boolean validateFingerprint(PublicKey publicKey, UUID expectedFingerprint) {
         if (publicKey == null || expectedFingerprint == null) {
             return false;
         }
@@ -140,7 +140,7 @@ public class EncryptionHandler {
         }
     }
 
-    public UUID convertBytesToUUID(byte[] bytes) {
+    public static UUID convertBytesToUUID(byte[] bytes) {
         if (bytes == null || bytes.length != 16) {
             throw new IllegalArgumentException("Byte array must be 16 bytes long for UUID conversion");
         }
